@@ -1,5 +1,6 @@
 import tkinter as tk
 from PIL import Image, ImageTk
+from board_coordinator import *
 
 def index2rank_file(i: int):
     return (8-(i/8), (i%8)+1)
@@ -9,8 +10,11 @@ def rank_file2index(rank: int, file:int):
 
 
 class Visual(tk.Tk):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, coordinator: Coordinator, *args, **kwargs):
         tk.Tk.__init__(self, *args, **kwargs)
+        # recieve the coordinator
+        self.coordinator = coordinator
+        
         self.title("Chess Computer")
 
         # the container will all contain all frames(pages). After that we'll be able to switch between frames
@@ -69,44 +73,44 @@ class StartPage(tk.Frame):
 
         # load the chessboard on screen
         self.boardBackground = ImageTk.PhotoImage(Image.open(
-            "images/EmptyChessBoard.png"))
+            "pythonchess/images/EmptyChessBoard.png"))
         self.boardCanvas = tk.Canvas(self, bg="black", width=520, height=520)
         self.boardCanvas.grid(rowspan=1, columnspan=4, row=1, column=1, padx=10, pady=5)
         self.boardCanvas.create_image(263, 263, image=self.boardBackground)
 
         # load all piece images
         self.pieceImages['p'] = ImageTk.PhotoImage(Image.open(
-            "images/BlackPawn.png").resize((50, 50)))
+            "pythonchess/images/BlackPawn.png").resize((50, 50)))
         self.pieceImages['r'] = ImageTk.PhotoImage(Image.open(
-            "images/BlackRook.png").resize((50, 50)))
+            "pythonchess/images/BlackRook.png").resize((50, 50)))
         self.pieceImages['b'] = ImageTk.PhotoImage(Image.open(
-            "images/BlackBishop.png").resize((50, 50)))
+            "pythonchess/images/BlackBishop.png").resize((50, 50)))
         self.pieceImages['n'] = ImageTk.PhotoImage(Image.open(
-            "images/BlackKnight.png").resize((50, 50)))
+            "pythonchess/images/BlackKnight.png").resize((50, 50)))
         self.pieceImages['k'] = ImageTk.PhotoImage(Image.open(
-            "images/BlackKing.png").resize((50, 50)))
+            "pythonchess/images/BlackKing.png").resize((50, 50)))
         self.pieceImages['q'] = ImageTk.PhotoImage(Image.open(
-            "images/BlackQueen.png").resize((50, 50)))
+            "pythonchess/images/BlackQueen.png").resize((50, 50)))
         self.pieceImages['P'] = ImageTk.PhotoImage(Image.open(
-            "images/WhitePawn.png").resize((50, 50)))
+            "pythonchess/images/WhitePawn.png").resize((50, 50)))
         self.pieceImages['R'] = ImageTk.PhotoImage(Image.open(
-            "images/WhiteRook.png").resize((50, 50)))
+            "pythonchess/images/WhiteRook.png").resize((50, 50)))
         self.pieceImages['B'] = ImageTk.PhotoImage(Image.open(
-            "images/WhiteBishop.png").resize((50, 50)))
+            "pythonchess/images/WhiteBishop.png").resize((50, 50)))
         self.pieceImages['N'] = ImageTk.PhotoImage(Image.open(
-            "images/WhiteKnight.png").resize((50, 50)))
+            "pythonchess/images/WhiteKnight.png").resize((50, 50)))
         self.pieceImages['K'] = ImageTk.PhotoImage(Image.open(
-            "images/WhiteKing.png").resize((50, 50)))
+            "pythonchess/images/WhiteKing.png").resize((50, 50)))
         self.pieceImages['Q'] = ImageTk.PhotoImage(Image.open(
-            "images/WhiteQueen.png").resize((50, 50)))
+            "pythonchess/images/WhiteQueen.png").resize((50, 50)))
         self.pieceImages[' '] = ImageTk.PhotoImage(Image.open(
-            "images/EmptySquare.png").resize((50, 50)))
+            "pythonchess/images/EmptySquare.png").resize((50, 50)))
         self.pieceImages["SelectedSquare"] = ImageTk.PhotoImage(
-            Image.open("images/SelectedSquare.png").resize((64, 64)))
+            Image.open("pythonchess/images/SelectedSquare.png").resize((64, 64)))
         self.pieceImages["LegalMove"] = ImageTk.PhotoImage(
-            Image.open("images/LegalMove.png").resize((64, 64)))
+            Image.open("pythonchess/images/LegalMove.png").resize((64, 64)))
         self.pieceImages["CaptureMove"] = ImageTk.PhotoImage(
-            Image.open("images/Capture.png").resize((64, 64)))
+            Image.open("pythonchess/images/Capture.png").resize((64, 64)))
 
         # bind the mouse click
         self.boardCanvas.bind("<Button-1>", self.selectAndMove)
@@ -234,7 +238,7 @@ class StartPage(tk.Frame):
             self.addPiece(piece, rank, file)
             
     def resetPosition(self):
-        pass
+        self.coordinator.reset_position()
     
     def emptyPosition(self):
         pass
