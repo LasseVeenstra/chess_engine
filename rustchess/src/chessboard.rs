@@ -58,7 +58,7 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn new_empty() -> Position {
+    pub fn new() -> Position {
         Position { 
             pseudo_moves: LoadMoves::new(),
             bb_wp: 0, 
@@ -164,4 +164,8 @@ impl Chessboard {
     fn new_start() -> Chessboard {
         Chessboard { current_position: Position::new_start() }
     }
+    fn new() -> Chessboard {
+        Chessboard { current_position: Position::new() }
+    }
+
 }

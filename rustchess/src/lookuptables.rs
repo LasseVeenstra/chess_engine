@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 use serde;
 use serde_big_array::BigArray;
 use std::thread;
-use std::sync::mpsc::{self, Sender};
+use std::sync::{Mutex, Arc};
 
 // Basic struct that is used for writing and parsing the json files.
 #[derive(Serialize, Deserialize, Debug)]
@@ -16,8 +16,7 @@ struct Array64 {
 }
 
 enum FailedMagicNumberError {
-    ConflictingIndexError,
-    OtherError
+    ConflictingIndexError
 }
 
 #[derive(Clone)]
@@ -35,7 +34,7 @@ impl SlidePieceType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MagicLookUp {
     #[serde(with = "BigArray")]
     shifts: [u8; 64],
@@ -49,20 +48,6 @@ pub struct MagicLookUp {
 impl MagicLookUp {
     pub fn new() -> MagicLookUp {
         MagicLookUp { shifts: [0; 64], magic_numbers: [0; 64], magic_masks: std::array::from_fn(|_| Vec::new())}
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct ThreadMessageFormat {
-    piece_index: usize,
-    magic_number: u64,
-    shift: u8,
-    magic_masks: Vec<u64>
-}
-
-impl ThreadMessageFormat {
-    fn new(piece_index: usize, magic_number: u64, shift: u8, magic_masks: Vec<u64>) -> ThreadMessageFormat {
-        ThreadMessageFormat{piece_index, magic_number, shift, magic_masks}
     }
 }
 
@@ -208,7 +193,7 @@ impl CreateLookUpTables {
         Ok(new_magic_masks)
     }
 
-    fn thread_slide_magic_search(search_number: u32, blockers: &[Vec<u64>; 64], slide_type: SlidePieceType, tx: Sender<String>) {
+    fn thread_slide_magic_search(search_number: u32, blockers: &[Vec<u64>; 64], magic_lookup: Arc<Mutex<MagicLookUp>>, slide_type: SlidePieceType) {
         // get the shift range
         let shift_range = match slide_type {
             SlidePieceType::Rook => 50..55,
@@ -224,9 +209,15 @@ impl CreateLookUpTables {
                     // Send the found magic number to the recieving thread
                     match CreateLookUpTables::try_slide_magic_number(&blockers, piece_index, magic_number, shift, &slide_type) {
                         Ok(magic_masks) => {
-                            let message = ThreadMessageFormat::new(piece_index, magic_number, shift, magic_masks);
-                            let message_as_string = serde_json::ser::to_string(&message).unwrap();
-                            tx.send(message_as_string).unwrap();
+                            // If the new lookuptable is smaller than the old one we will replace it.
+                            let mut m = magic_lookup.lock().expect("Could'nt get lock on magic lookup");
+                            if m.magic_masks[piece_index].len() > magic_masks.len() || m.magic_masks[piece_index].len() == 0 {
+                                println!("{}: magic number {} for piece index {} with shift {} and lenght {}", slide_type.to_string(),
+                                magic_number, piece_index, shift, magic_masks.len());
+                                m.magic_masks[piece_index] = magic_masks;
+                                m.magic_numbers[piece_index] = magic_number;
+                                m.shifts[piece_index] = shift;
+                            }
                         },
                         Err(_) => {}
                     };
@@ -250,63 +241,44 @@ impl CreateLookUpTables {
                 self.bishop_blocker_patterns.clone()
             }
         };
-
-        let mut magic_lookup = match slide_type {
-            SlidePieceType::Rook => &mut self.rook_magic_lookup,
-            SlidePieceType::Bishop => &mut self.bishop_magic_lookup
+        let magic_lookup = match slide_type {
+            SlidePieceType::Rook => self.rook_magic_lookup.clone(),
+            SlidePieceType::Bishop => self.bishop_magic_lookup.clone()
         };
+        // create a version of self that can have multiple owners, namely all threads will own self.
+        let shared_magic_lookup = Arc::new(Mutex::new(magic_lookup));
+        // store handles
+        let mut handles = vec![];
 
-        let (tx1, rx) = mpsc::channel();
-        let tx2 = mpsc::Sender::clone(&tx1);
-        let tx3 = mpsc::Sender::clone(&tx1);
-        let tx4 = mpsc::Sender::clone(&tx1);
-        let tx5 = mpsc::Sender::clone(&tx1);
-
-        // copy the blockers
-        let blockers1 = blockers.clone();
-        let blockers2 = blockers.clone();
-        let blockers3 = blockers.clone();
-        let blockers4 = blockers.clone();
-        let blockers5 = blockers.clone();
-
-        let slide_type1 = slide_type.clone();
-        let slide_type2 = slide_type.clone();
-        let slide_type3 = slide_type.clone();
-        let slide_type4 = slide_type.clone();
-        let slide_type5 = slide_type.clone();
-
-        thread::spawn(move || {
-            CreateLookUpTables::thread_slide_magic_search(search_number, &blockers1, slide_type1, tx1);
-        });
-        thread::spawn(move || {
-            CreateLookUpTables::thread_slide_magic_search(search_number, &blockers2, slide_type2, tx2);
-        });
-        thread::spawn(move || {
-            CreateLookUpTables::thread_slide_magic_search(search_number, &blockers3, slide_type3, tx3);
-        });
-        thread::spawn(move || {
-            CreateLookUpTables::thread_slide_magic_search(search_number, &blockers4, slide_type4, tx4);
-        });
-        thread::spawn(move || {
-            CreateLookUpTables::thread_slide_magic_search(search_number, &blockers5, slide_type5, tx5);
-        });
-
-        for message_as_string in rx {
-            let message: ThreadMessageFormat = serde_json::from_str(message_as_string.as_str())?;
-            // If the new lookuptable is smaller than the old one we will replace it.
-            if magic_lookup.magic_masks[message.piece_index].len() > message.magic_masks.len() || magic_lookup.magic_masks[message.piece_index].len() == 0 {
-                println!("{}: magic number {} for piece index {} with shift {} and lenght {}", slide_type.to_string(),
-                 message.magic_number, message.piece_index, message.shift, message.magic_masks.len());
-                 magic_lookup.magic_masks[message.piece_index] = message.magic_masks;
-                 magic_lookup.magic_numbers[message.piece_index] = message.magic_number;
-                 magic_lookup.shifts[message.piece_index] = message.shift;
-            }
+        // create all threads
+        for _ in 0..5 {
+            let cloned_magic = shared_magic_lookup.clone();
+            let clone_blockers = blockers.clone();
+            let clone_slide_type = slide_type.clone();
+            let handle = thread::spawn(move || {
+                CreateLookUpTables::thread_slide_magic_search(search_number, &clone_blockers, cloned_magic, clone_slide_type);
+            });
+            handles.push(handle);
         }
+
+        // make sure all handles have finished
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let magic_lookup = Arc::try_unwrap(shared_magic_lookup).unwrap().into_inner().unwrap();
+
         // save the new magic lookup tables.
         CreateLookUpTables::setup_directory("lookuptables");
         match slide_type {
-            SlidePieceType::Rook => {CreateLookUpTables::write2file("rook_magic_lookup.json", magic_lookup)?;},
-            SlidePieceType::Bishop => {CreateLookUpTables::write2file("bishop_magic_lookup.json", magic_lookup)?;}
+            SlidePieceType::Rook => {
+                self.rook_magic_lookup = magic_lookup;
+                CreateLookUpTables::write2file("rook_magic_lookup.json", &self.rook_magic_lookup)?;
+            },
+            SlidePieceType::Bishop => {
+                self.bishop_magic_lookup = magic_lookup;
+                CreateLookUpTables::write2file("bishop_magic_lookup.json", &self.bishop_magic_lookup)?;
+            }
         }
         std::env::set_current_dir("../")?;
 
