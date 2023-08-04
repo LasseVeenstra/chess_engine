@@ -4,5 +4,5 @@ class Coordinator():
     def __init__(self) -> None:
         pass
 
-
-rst.create_lookup(5000)
+cb = rst.Chessboard()
+print(cb.board2string())

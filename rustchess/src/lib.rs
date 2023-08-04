@@ -18,15 +18,29 @@ fn create_lookup(search_number: usize) -> PyResult<()> {
     Ok(())
 }
 
+#[pyclass]
+pub struct PyChessboard {
+    cb: chessboard::Chessboard,
+    value: i32
+}
+
+#[pymethods]
+impl PyChessboard {
+    #[new]
+    pub fn new() -> Self {
+        PyChessboard { cb: chessboard::Chessboard::new_start(), value: 5 }
+    }
+    pub fn value(&self) -> i32 {
+        self.value
+    }
+}
+
 /// A Python module implemented in Rust.
 #[pymodule]
 fn rustchess(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
     m.add_function(wrap_pyfunction!(create_lookup, m)?)?;
+    m.add_class::<PyChessboard>()?;
+    m.add_class::<chessboard::Chessboard>()?;
     Ok(())
-}
-
-
-fn main() {
-    
 }

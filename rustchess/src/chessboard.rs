@@ -1,3 +1,4 @@
+use pyo3::prelude::*;
 use crate::bitboard_helper::*;
 use crate::lookuptables::LoadMoves;
 
@@ -153,19 +154,32 @@ impl Position {
         }
     }
 
+    pub fn to_string(&self) -> String {
+        for i in 0..64 {
+            
+        }
+        "hallo".to_string()
+    }
+
 }
 
-
+#[pyclass]
 pub struct Chessboard {
     current_position: Position
 }
 
+#[pymethods]
 impl Chessboard {
-    fn new_start() -> Chessboard {
+    #[staticmethod]
+    pub fn new_start() -> Chessboard {
         Chessboard { current_position: Position::new_start() }
     }
-    fn new() -> Chessboard {
+    #[new]
+    pub fn new() -> Chessboard {
         Chessboard { current_position: Position::new() }
+    }
+    pub fn board2string(&self) -> String {
+        self.current_position.to_string()
     }
 
 }
