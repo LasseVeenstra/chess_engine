@@ -39,6 +39,23 @@ pub fn get_lsb(bb: u64) -> u64 {
     (bb & -bb) as u64
 }
 
+pub fn bb_to_vec(mut bb: u64) -> Vec<u8> {
+    // all bits will be translated to their index and returns 
+    // vec with all indices
+    let mut res = Vec::new();
+    for _ in 0..64 {
+        let lsb = get_lsb(bb);
+        for i in 0..64 {
+            if (lsb >> i) & 1 == 1 {
+                res.push(i);
+                break
+            }
+        bb = subtract_bb(bb, lsb);
+        }
+    }
+    res
+}
+
 pub fn rank_file2index(rank: u8, file:u8) -> Result<u8, BitBoardError> {
     if rank == 0 || rank > 8 {
         Err(BitBoardError::RankOutOfBoard)

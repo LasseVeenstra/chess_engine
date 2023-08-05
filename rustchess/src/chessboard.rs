@@ -16,9 +16,31 @@ const WHITE_KNIGHT_STARTING_BB: u64 = 0b01000010_00000000_00000000_00000000_0000
 const WHITE_QUEEN_STARTING_BB: u64 = 0b00001000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
 const WHITE_KING_STARTING_BB: u64 = 0b00010000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
 
+const ADJECENT_FILE_A_BB: u64 = 0b01000000_01000000_01000000_01000000_01000000_01000000_01000000_01000000;
+const ADJECENT_FILE_B_BB: u64 = 0b10100000_10100000_10100000_10100000_10100000_10100000_10100000_10100000;
+const ADJECENT_FILE_C_BB: u64 = 0b01010000_01010000_01010000_01010000_01010000_01010000_01010000_01010000;
+const ADJECENT_FILE_D_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000; sdfsdfsd
+const ADJECENT_FILE_E_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const ADJECENT_FILE_F_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const ADJECENT_FILE_G_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const ADJECENT_FILE_H_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+
 enum ToMove {
     White,
     Black
+}
+
+pub enum PieceColor {
+    White,
+    Black,
+    None
+}
+
+#[derive(Debug)]
+enum Selected {
+    None,
+    White(u8),
+    Black(u8)
 }
 
 #[derive(Debug)]
@@ -38,8 +60,27 @@ pub enum PieceType {
     EmptySquare
 }
 
+impl PieceType {
+    pub fn to_char(&self) -> char {
+        match *self {
+            PieceType::WhitePawn => 'P',
+            PieceType::BlackPawn => 'p',
+            PieceType::WhiteRook => 'R',
+            PieceType::BlackRook => 'r',
+            PieceType::WhiteBishop => 'B',
+            PieceType::BlackBishop => 'b',
+            PieceType::WhiteKnight => 'N',
+            PieceType::BlackKnight => 'n',
+            PieceType::WhiteKing => 'K',
+            PieceType::BlackKing => 'k',
+            PieceType::WhiteQueen => 'Q',
+            PieceType::BlackQueen => 'q',
+            PieceType::EmptySquare => ' '
+        }
+    }
+}
+
 pub struct Position {
-    pseudo_moves: LoadMoves,
     bb_wp: u64, // BitBoard White Pawn
     bb_wr: u64, // bitBoard White Rook
     bb_wb: u64,
@@ -61,7 +102,6 @@ pub struct Position {
 impl Position {
     pub fn new() -> Position {
         Position { 
-            pseudo_moves: LoadMoves::new(),
             bb_wp: 0, 
             bb_wr: 0, 
             bb_wb: 0, 
@@ -83,7 +123,6 @@ impl Position {
 
     pub fn new_start() -> Position {
         Position {
-            pseudo_moves: LoadMoves::new(),
             bb_wp: WHITE_PAWN_STARTING_BB, 
             bb_wr: WHITE_ROOK_STARTING_BB, 
             bb_wb: WHITE_BISHOP_STARTING_BB, 
@@ -110,7 +149,7 @@ impl Position {
         self.bb_wp | self.bb_wr | self.bb_wn | self.bb_wb | self.bb_wk | self.bb_wq
     }
 
-    pub fn detect_piece_type(&self, piece_index: u64) -> PieceType {
+    pub fn detect_piece_type(&self, piece_index: u8) -> PieceType {
         // Detects the piece type of the current piece location. Piece index must
         // be an integer between 0 and 63, not a bitboard with one bit!
         if (self.bb_wp >> piece_index) & 1 == 1 {
@@ -154,32 +193,188 @@ impl Position {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        for i in 0..64 {
-            
+    pub fn detect_piece_color(&self, index: u8) -> PieceColor {
+        if self.detect_piece_type(index).to_char().is_uppercase() {
+            PieceColor::White
         }
-        "hallo".to_string()
+        else if !self.detect_piece_type(index).to_char().is_whitespace() {
+            PieceColor::Black
+        }
+        else {
+            PieceColor::None
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        (0..64).map(|i| self.detect_piece_type(i).to_char().to_string()).collect::<Vec<String>>().join("")
     }
 
 }
 
 #[pyclass]
 pub struct Chessboard {
-    current_position: Position
+    current_position: Position,
+    selected: Selected,
+    pseudo_moves: LoadMoves,
+}
+
+impl Chessboard {
+    fn get_legal_moves(&mut self, index: u8, piece_color: &PieceColor) -> u64 {
+        // index is the index of the piece of which we want to find the legal moves.
+        // This function already assumes that the correct player is making the move
+        // and that he is not trying to move to his own piece, it also assumes that 
+        // on old index is indeed a piece of the player that has to move.
+        let blockers = self.current_position.white_pieces() | self.current_position.black_pieces();
+        let mut legal_moves = match self.current_position.detect_piece_type(index) {
+            PieceType::WhitePawn  => self.pseudo_moves.white_pawn(index as usize),
+            PieceType::BlackPawn => self.pseudo_moves.black_pawn(index as usize),
+            PieceType::BlackKnight | PieceType::WhiteKnight => self.pseudo_moves.knight(index as usize),
+            PieceType::BlackBishop | PieceType::WhiteBishop => *self.pseudo_moves.bishop(index as usize, blockers).unwrap(),
+            PieceType::BlackRook | PieceType::WhiteRook => *self.pseudo_moves.rook(index as usize, blockers).unwrap(),
+            PieceType::BlackKing | PieceType::WhiteKing => self.pseudo_moves.king(index as usize),
+            PieceType::WhiteQueen | PieceType::BlackQueen => self.pseudo_moves.queen(index as usize, blockers).unwrap(),
+            _ => 0
+        };
+        // remove the ability to capture own pieces
+        legal_moves = match piece_color {
+            PieceColor::White => subtract_bb(legal_moves, self.current_position.white_pieces()),
+            PieceColor::Black => subtract_bb(legal_moves, self.current_position.black_pieces()),
+            _ => 0
+        };
+
+        // return final moves
+        legal_moves
+    }
+
+    fn check_move_for_legal(&mut self, old_index: u8, index: u8, piece_color: &PieceColor) -> bool {
+        let legal_moves = self.get_legal_moves(old_index, piece_color);
+        // if after all the constraints the bit is still available the the move must be legal
+        if (legal_moves >> old_index) & 1 == 1 {
+            return true
+        }
+        else {
+            false
+        }
+    }
+
+    fn move_piece(&mut self, old_index: u8, index: u8, piece_color: &PieceColor) {
+        // when possible move piece from old index to new index
+        println!("Moving {} to {}", old_index, index);
+    }
+
+    fn select_new(&mut self, index: u8) {
+        let w_pieces = self.current_position.white_pieces();
+        let b_pieces = self.current_position.black_pieces();
+
+        match self.current_position.to_move {
+            // check if it is a valid new select
+            ToMove::White => {
+                if (w_pieces >> index) & 1 == 1 {
+                    self.selected = Selected::White(index)
+                }
+            }
+            // check if it is a valid new select
+            ToMove::Black => {
+                if (b_pieces >> index) & 1 == 1 {
+                    self.selected = Selected::Black(index)
+                }
+            }
+        }
+    }
 }
 
 #[pymethods]
 impl Chessboard {
     #[staticmethod]
     pub fn new_start() -> Chessboard {
-        Chessboard { current_position: Position::new_start() }
+        Chessboard { current_position: Position::new_start(),
+        selected: Selected::None,
+        pseudo_moves: LoadMoves::new() }
     }
     #[new]
     pub fn new() -> Chessboard {
-        Chessboard { current_position: Position::new() }
+        Chessboard { current_position: Position::new(),
+        selected: Selected::None,
+        pseudo_moves: LoadMoves::new() }
     }
-    pub fn board2string(&self) -> String {
+    pub fn to_string(&self) -> String {
         self.current_position.to_string()
+    }
+
+    pub fn get_selected(&self) -> i32 {
+        // return -1 in case we have no square selected, 
+        // note that Option<> is not available because this function
+        // is available to python, so we must strictly use integers
+        match self.selected {
+            Selected::None => -1,
+            Selected::Black(i) => i as i32,
+            Selected::White(i) => i as i32
+        }
+    }
+
+    pub fn get_legal_captures(&mut self, index: u8) -> Vec<u8> {
+        // index must be the index of the piece of which we want to get legal captures
+        let piece_color = self.current_position.detect_piece_color(index);
+        let legal_moves = self.get_legal_moves(index, &piece_color);
+        let legal_captures = match piece_color {
+            PieceColor::White => legal_moves & self.current_position.black_pieces(),
+            PieceColor::Black => legal_moves & self.current_position.white_pieces(),
+            _ => 0
+        };
+        bb_to_vec(legal_captures)
+    }
+
+    pub fn get_legal_non_capture_moves(&mut self, index: u8) -> Vec<u8> {
+        // index must be the index of the piece of which we want to get legal captures
+        let piece_color = self.current_position.detect_piece_color(index);
+        let legal_moves = self.get_legal_moves(index, &piece_color);
+        let legal_non_capture = match piece_color {
+            PieceColor::White => subtract_bb(legal_moves, self.current_position.black_pieces()),
+            PieceColor::Black => subtract_bb(legal_moves, self.current_position.white_pieces()),
+            _ => 0
+        };
+        bb_to_vec(legal_non_capture)
+    }
+
+    pub fn input_select(&mut self, index: u8) {
+        let w_pieces = self.current_position.white_pieces();
+        let b_pieces = self.current_position.black_pieces();
+
+        match self.selected {
+            // in case we have not selected anything
+            Selected::None => {
+                self.select_new(index);
+            }
+            // in case we have already selected something
+            Selected::White(old_index) => {
+                match self.current_position.to_move {
+                    // might be possible
+                    ToMove::White => {
+                        // if newly selected piece is not white we can move or capture there
+                        if !((w_pieces >> index) & 1 == 1) {
+                            self.move_piece(old_index, index, &PieceColor::White);
+                        }
+                        // remove the highlight
+                        self.selected = Selected::None;
+                    }
+                    // can't move a white piece when black to move
+                    ToMove::Black => {}
+                    }
+                }
+            Selected::Black(old_index) => {
+                match self.current_position.to_move {
+                    // might be possible
+                    ToMove::Black => {
+                        // if newly selected piece is not black we can move or capture there
+                        if !((b_pieces >> index) & 1 == 1) {
+                            self.move_piece(old_index, index, &PieceColor::Black);
+                        }
+                        self.selected = Selected::None;
+                    }
+                    ToMove::White => {}
+                }
+            }
+        }
     }
 
 }

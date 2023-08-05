@@ -423,6 +423,14 @@ impl LoadMoves {
         let i = viewed_blockers.wrapping_mul(self.bishop_magic_lookup.magic_numbers[piece_index]) >> self.bishop_magic_lookup.shifts[piece_index];
         self.bishop_magic_lookup.magic_masks[piece_index].get(i as usize)
     }
+
+    pub fn queen(&self, piece_index: usize, blockers: u64) -> Option<u64> {
+        // piece_index must be a number between 0 and 63, not a bitboard with one bit!
+        // blockers is the bitboard with bits on enemy and friendly pieces combined, note that 
+        // this function will return a bitboard where friendly piece can be captured.
+        Some(self.rook(piece_index, blockers)? | self.bishop(piece_index, blockers)?)
+    }
+
     pub fn king(&self, piece_index: usize) -> u64 {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         self.king_masks[piece_index]
