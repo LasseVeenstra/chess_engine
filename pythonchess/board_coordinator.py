@@ -1,4 +1,4 @@
-import rustchess as rst
+import RustEngine as rst
 from enum import Enum, auto
     
 # create enum for player type
@@ -31,11 +31,11 @@ class Coordinator():
     def get_legal_captures(self, i: int) -> list[int]:
         return self.chessboard.get_legal_captures(i)
     
-    def get_legal_non_capture_moves(self, i: int) -> list[int]:
-        return self.chessboard.get_legal_non_capture_moves(i)
+    def get_legal_non_captures(self, i: int) -> list[int]:
+        return self.chessboard.get_legal_non_captures(i)
     
     
-    def recieve_click_and_respond(self, index: int):
+    def recieve_click(self, index: int):
         # send the select to the chessboard
         self.chessboard.input_select(index)
             

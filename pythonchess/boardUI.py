@@ -303,9 +303,9 @@ class GamePage(tk.Frame):
     def highlightLegalMoves(self, indices: list[int], move_type: MoveType):
         # The indices must be a list with integers denoting the indices of the squares to highlight
         match move_type:
-            case MoveType.Capture:
-                img = self.pieceImages["LegalMove"]
             case MoveType.NonCapture:
+                img = self.pieceImages["LegalMove"]
+            case MoveType.Capture:
                 img = self.pieceImages["CaptureMove"]
         
         for i in indices:
@@ -322,11 +322,14 @@ class GamePage(tk.Frame):
         # this function will send to the backend what square was pressed
         rank, file = self.visualBoard2Board(event.x, event.y)
         index = rank_file2index(rank, file)
+        # invert the index if we are having blacks perspective
+        if self.boardView == BoardView.Black:
+            index = 63 - index
         # check if the rank and file are valid (not choosing outside the board)
         if index < 0 or index > 63:
             return
         else:
-            self.coordinator.recieve_click_and_respond(index)
+            self.coordinator.recieve_click(index)
         self.update()
             
             
@@ -364,11 +367,14 @@ class GamePage(tk.Frame):
         self.legalmoves = []
         # get the select square
         for i in self.coordinator.get_select(): # only option are [] and [i], this is just a trick to use an alternative to Option<>
+            # change index depending upon perspective
+            if self.boardView == BoardView.Black:
+                i = 63 - i
             # highlight the select square
             self.highlightSquare(i)
             # highlight legal capture and non capture moves
             self.highlightLegalMoves(self.coordinator.get_legal_captures(i), MoveType.Capture)
-            self.highlightLegalMoves(self.coordinator.get_legal_non_capture_moves(i), MoveType.NonCapture)
+            self.highlightLegalMoves(self.coordinator.get_legal_non_captures(i), MoveType.NonCapture)
         # load the position
         self.loadPosition(self.coordinator.board_to_string())
 

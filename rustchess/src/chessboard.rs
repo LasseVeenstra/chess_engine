@@ -16,14 +16,24 @@ const WHITE_KNIGHT_STARTING_BB: u64 = 0b01000010_00000000_00000000_00000000_0000
 const WHITE_QUEEN_STARTING_BB: u64 = 0b00001000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
 const WHITE_KING_STARTING_BB: u64 = 0b00010000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
 
-const FILE_A_BB: u64 = 0b10000000_10000000_10000000_10000000_10000000_10000000_10000000_10000000;
-const FILE_B_BB: u64 = 0b01000000_01000000_01000000_01000000_01000000_01000000_01000000_01000000;
-const FILE_C_BB: u64 = 0b00100000_00100000_00100000_00100000_00100000_00100000_00100000_00100000; 
-const FILE_D_BB: u64 = 0b00010000_00010000_00010000_00010000_00010000_00010000_00010000_00010000;
-const FILE_E_BB: u64 = 0b00001000_00001000_00001000_00001000_00001000_00001000_00001000_00001000;
-const FILE_F_BB: u64 = 0b00000100_00000100_00000100_00000100_00000100_00000100_00000100_00000100;
-const FILE_G_BB: u64 = 0b00000010_00000010_00000010_00000010_00000010_00000010_00000010_00000010;
-const FILE_H_BB: u64 = 0b00000001_00000001_00000001_00000001_00000001_00000001_00000001_00000001;
+const FILE_H_BB: u64 = 0b10000000_10000000_10000000_10000000_10000000_10000000_10000000_10000000;
+const FILE_G_BB: u64 = 0b01000000_01000000_01000000_01000000_01000000_01000000_01000000_01000000;
+const FILE_F_BB: u64 = 0b00100000_00100000_00100000_00100000_00100000_00100000_00100000_00100000; 
+const FILE_E_BB: u64 = 0b00010000_00010000_00010000_00010000_00010000_00010000_00010000_00010000;
+const FILE_D_BB: u64 = 0b00001000_00001000_00001000_00001000_00001000_00001000_00001000_00001000;
+const FILE_C_BB: u64 = 0b00000100_00000100_00000100_00000100_00000100_00000100_00000100_00000100;
+const FILE_B_BB: u64 = 0b00000010_00000010_00000010_00000010_00000010_00000010_00000010_00000010;
+const FILE_A_BB: u64 = 0b00000001_00000001_00000001_00000001_00000001_00000001_00000001_00000001;
+
+// array that converts piece index to file
+const INDEX2FILE: [u64; 64] = [FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB];
 
 enum ToMove {
     White,
@@ -205,6 +215,44 @@ impl Position {
         }
     }
 
+    pub fn piece_type2bb(&self, piece_type: &PieceType) -> u64 {
+        // note that the returned bitboard is a copy of the stored bitboard,
+        // so it is not a mutable reference!
+        match piece_type {
+            PieceType::WhitePawn => self.bb_wp,
+            PieceType::BlackPawn => self.bb_bp,
+            PieceType::WhiteRook => self.bb_wr,
+            PieceType::BlackRook => self.bb_br,
+            PieceType::WhiteBishop => self.bb_wb,
+            PieceType::BlackBishop => self.bb_bb,
+            PieceType::WhiteKnight => self.bb_wn,
+            PieceType::BlackKnight => self.bb_bn,
+            PieceType::WhiteKing => self.bb_wk,
+            PieceType::BlackKing => self.bb_bk,
+            PieceType::WhiteQueen => self.bb_wq,
+            PieceType::BlackQueen => self.bb_bq,
+            PieceType::EmptySquare => 0
+        }
+    }
+
+    pub fn set_bb_of_piece_type(&mut self,bb: u64, piece_type: &PieceType) {
+        match piece_type {
+            PieceType::WhitePawn => self.bb_wp = bb,
+            PieceType::BlackPawn => self.bb_bp = bb,
+            PieceType::WhiteRook => self.bb_wr = bb,
+            PieceType::BlackRook => self.bb_br = bb,
+            PieceType::WhiteBishop => self.bb_wb = bb,
+            PieceType::BlackBishop => self.bb_bb = bb,
+            PieceType::WhiteKnight => self.bb_wn = bb,
+            PieceType::BlackKnight => self.bb_bn = bb,
+            PieceType::WhiteKing => self.bb_wk = bb,
+            PieceType::BlackKing => self.bb_bk = bb,
+            PieceType::WhiteQueen => self.bb_wq = bb,
+            PieceType::BlackQueen => self.bb_bq = bb,
+            PieceType::EmptySquare => {}
+        };
+    }
+
     pub fn to_string(&self) -> String {
         (0..64).map(|i| self.detect_piece_type(i).to_char().to_string()).collect::<Vec<String>>().join("")
     }
@@ -216,6 +264,8 @@ pub struct Chessboard {
     current_position: Position,
     selected: Selected,
     pseudo_moves: LoadMoves,
+    // every time we make a move this will need to be cleared
+    legal_moves_cache: [Option<u64>; 64]
 }
 
 impl Chessboard {
@@ -224,32 +274,62 @@ impl Chessboard {
         // This function already assumes that the correct player is making the move
         // and that he is not trying to move to his own piece, it also assumes that 
         // on old index is indeed a piece of the player that has to move.
-        let blockers = self.current_position.white_pieces() | self.current_position.black_pieces();
-        let mut legal_moves = match self.current_position.detect_piece_type(index) {
-            PieceType::WhitePawn  => self.pseudo_moves.white_pawn(index as usize),
-            PieceType::BlackPawn => self.pseudo_moves.black_pawn(index as usize),
+
+        // Check if we have already calculated the moves before
+        match self.legal_moves_cache[index as usize] {
+            Some(legal_moves) => return legal_moves,
+            None => {}
+        }
+        // set friendly and enemy pieces
+        let (friendly_pieces, enemy_pieces) = match piece_color {
+            PieceColor::White => (self.current_position.white_pieces(), self.current_position.black_pieces()),
+            PieceColor::Black => (self.current_position.black_pieces(), self.current_position.white_pieces()),
+            _ => (0, 0)
+        };
+        // Get all blockers.
+        let blockers = friendly_pieces | enemy_pieces;
+        let piece_type = self.current_position.detect_piece_type(index);
+        let mut legal_moves = match piece_type {
+            PieceType::WhitePawn | PieceType::BlackPawn => {
+                let piece_file = INDEX2FILE[index as usize];
+                let pawn_moves = match piece_color {
+                    PieceColor::White => self.pseudo_moves.white_pawn(index as usize),
+                    PieceColor::Black => self.pseudo_moves.black_pawn(index as usize),
+                    _ => 0
+                };
+                // moves that go directly forwards
+                let front = subtract_bb(pawn_moves & piece_file, blockers);
+                // captures and pieces that block our way
+                let captures = match self.current_position.es_target {
+                    //_ => subtract_bb(enemy_pieces & pawn_moves, piece_file),
+                    Some(target) => subtract_bb(set_bit(enemy_pieces, target) & pawn_moves, piece_file),
+                    None => subtract_bb(enemy_pieces & pawn_moves, piece_file)
+                };
+                front | captures
+            }
             PieceType::BlackKnight | PieceType::WhiteKnight => self.pseudo_moves.knight(index as usize),
-            PieceType::BlackBishop | PieceType::WhiteBishop => *self.pseudo_moves.bishop(index as usize, blockers).unwrap(),
-            PieceType::BlackRook | PieceType::WhiteRook => *self.pseudo_moves.rook(index as usize, blockers).unwrap(),
+            PieceType::BlackBishop | PieceType::WhiteBishop => *self.pseudo_moves.bishop(index as usize, blockers).expect("Couldn't get bishop moves"),
+            PieceType::BlackRook | PieceType::WhiteRook => *self.pseudo_moves.rook(index as usize, blockers).expect("Couldn't get rook moves"),
             PieceType::BlackKing | PieceType::WhiteKing => self.pseudo_moves.king(index as usize),
-            PieceType::WhiteQueen | PieceType::BlackQueen => self.pseudo_moves.queen(index as usize, blockers).unwrap(),
+            PieceType::WhiteQueen | PieceType::BlackQueen => self.pseudo_moves.queen(index as usize, blockers).expect("Couldn't get queen moves"),
             _ => 0
         };
+
         // remove the ability to capture own pieces
-        legal_moves = match piece_color {
-            PieceColor::White => subtract_bb(legal_moves, self.current_position.white_pieces()),
-            PieceColor::Black => subtract_bb(legal_moves, self.current_position.black_pieces()),
-            _ => 0
-        };
+        legal_moves = subtract_bb(legal_moves, friendly_pieces);
+
+        // store the result in the cache
+        self.legal_moves_cache[index as usize] = Some(legal_moves);
 
         // return final moves
         legal_moves
     }
 
     fn check_move_for_legal(&mut self, old_index: u8, index: u8, piece_color: &PieceColor) -> bool {
+        // get all legal moves
         let legal_moves = self.get_legal_moves(old_index, piece_color);
-        // if after all the constraints the bit is still available the the move must be legal
-        if (legal_moves >> old_index) & 1 == 1 {
+        // if there is a bit on the legal moves bitboard at index, the move is legal
+        if (legal_moves >> index) & 1 == 1 {
             return true
         }
         else {
@@ -259,7 +339,48 @@ impl Chessboard {
 
     fn move_piece(&mut self, old_index: u8, index: u8, piece_color: &PieceColor) {
         // when possible move piece from old index to new index
-        println!("Moving {} to {}", old_index, index);
+        
+        // return if the move is not legal
+        if !self.check_move_for_legal(old_index, index, piece_color) {
+            return
+        }
+        // get the piece type of the piece we want to move and the piece type
+        // of the piece we want to capture (note that these are not by reference but a copy, so we must
+        // replace them later.)
+        let moving_piece_type = self.current_position.detect_piece_type(old_index);
+        let captured_piece_type = self.current_position.detect_piece_type(index);
+        let mut bb_moving_piece = self.current_position.piece_type2bb(&moving_piece_type);
+        let mut bb_captured_piece = self.current_position.piece_type2bb(&captured_piece_type);
+
+        // add and update en-passant target
+        match moving_piece_type {
+            PieceType::WhitePawn | PieceType::BlackPawn => {
+                // if we move up two squares (or down).
+                if (old_index as i16 - index as i16).abs() == 16 {
+                    self.current_position.es_target = Some((old_index + index) / 2);
+                }
+            }
+            _ => {self.current_position.es_target = None}
+        };
+        
+
+        // make the move on the bitboards
+        bb_moving_piece = subtract_bb(bb_moving_piece, set_bit(0, old_index));
+        bb_moving_piece = set_bit(bb_moving_piece, index);
+        bb_captured_piece = subtract_bb(bb_captured_piece, set_bit(0, index));
+        
+        // place the new bitboards on the place of the old ones
+        self.current_position.set_bb_of_piece_type(bb_moving_piece, &moving_piece_type);
+        self.current_position.set_bb_of_piece_type(bb_captured_piece, &captured_piece_type);
+
+        // update meta data
+        self.current_position.to_move = match self.current_position.to_move {
+            ToMove::White => ToMove::Black,
+            _ => ToMove::White
+        };
+        self.legal_moves_cache = [None; 64];
+
+        
     }
 
     fn select_new(&mut self, index: u8) {
@@ -289,13 +410,15 @@ impl Chessboard {
     pub fn new_start() -> Chessboard {
         Chessboard { current_position: Position::new_start(),
         selected: Selected::None,
-        pseudo_moves: LoadMoves::new() }
+        pseudo_moves: LoadMoves::new(),
+        legal_moves_cache: [None; 64] }
     }
     #[new]
     pub fn new() -> Chessboard {
         Chessboard { current_position: Position::new(),
         selected: Selected::None,
-        pseudo_moves: LoadMoves::new() }
+        pseudo_moves: LoadMoves::new(),
+        legal_moves_cache: [None; 64] }
     }
     pub fn to_string(&self) -> String {
         self.current_position.to_string()
@@ -316,24 +439,35 @@ impl Chessboard {
         // index must be the index of the piece of which we want to get legal captures
         let piece_color = self.current_position.detect_piece_color(index);
         let legal_moves = self.get_legal_moves(index, &piece_color);
-        let legal_captures = match piece_color {
-            PieceColor::White => legal_moves & self.current_position.black_pieces(),
-            PieceColor::Black => legal_moves & self.current_position.white_pieces(),
+        // get enemy pieces
+        let enemy_pieces = match piece_color {
+            PieceColor::White => self.current_position.black_pieces(),
+            PieceColor::Black => self.current_position.white_pieces(),
             _ => 0
+        };
+        // add en-passant possibly
+        let legal_captures = match self.current_position.es_target {
+            Some(target) => legal_moves & set_bit(enemy_pieces, target),
+            None => legal_moves & enemy_pieces
         };
         bb_to_vec(legal_captures)
     }
 
-    pub fn get_legal_non_capture_moves(&mut self, index: u8) -> Vec<u8> {
+    pub fn get_legal_non_captures(&mut self, index: u8) -> Vec<u8> {
         // index must be the index of the piece of which we want to get legal captures
         let piece_color = self.current_position.detect_piece_color(index);
         let legal_moves = self.get_legal_moves(index, &piece_color);
-        let legal_non_capture = match piece_color {
-            PieceColor::White => subtract_bb(legal_moves, self.current_position.black_pieces()),
-            PieceColor::Black => subtract_bb(legal_moves, self.current_position.white_pieces()),
+        // get enemy pieces
+        let enemy_pieces = match piece_color {
+            PieceColor::White => self.current_position.black_pieces(),
+            PieceColor::Black => self.current_position.white_pieces(),
             _ => 0
         };
-        bb_to_vec(legal_non_capture)
+        let legal_non_captures = match self.current_position.es_target {
+            Some(target) => subtract_bb(legal_moves, set_bit(enemy_pieces, target)),
+            None => subtract_bb(legal_moves, enemy_pieces)
+        };
+        bb_to_vec(legal_non_captures)
     }
 
     pub fn input_select(&mut self, index: u8) {

@@ -1,3 +1,4 @@
+use crate::bitboard_helper::to_stringboard;
 use crate::chessboard_helper::MoveCalculator;
 use rand::Rng;
 use std::io::{BufWriter, Write, BufReader};
@@ -20,7 +21,7 @@ enum FailedMagicNumberError {
 }
 
 #[derive(Clone)]
-enum SlidePieceType {
+pub enum SlidePieceType {
     Rook,
     Bishop
 }
@@ -95,8 +96,8 @@ impl CreateLookUpTables {
         match result {
             Ok(_) => {},
             Err(_) => {
-                fs::create_dir(filepath).unwrap();
-                std::env::set_current_dir(filepath).unwrap();
+                fs::create_dir(filepath).expect("Couldn't make directory");
+                std::env::set_current_dir(filepath).expect("Couldn't set directory to lookuptables");
             }
         };
     }
@@ -135,7 +136,7 @@ impl CreateLookUpTables {
         blocker_bitboards
     }
 
-    pub fn create_rook_pre_table(&mut self) -> Result<(), std::io::Error> {
+    fn create_rook_pre_table(&mut self) -> Result<(), std::io::Error> {
         // Creates the pre masks for the rook, that is, for a given index,
         // all possible places where blocker might be. Here we ignore the outer squares because
         // we can either move there, or capture there.
@@ -156,7 +157,7 @@ impl CreateLookUpTables {
         std::env::set_current_dir("../")?;
         Ok(())
     }
-    pub fn get_all_rook_blocker_patterns(&mut self) {
+    fn get_all_rook_blocker_patterns(&mut self) {
         // This function gets all the possible rook blocker patterns for each possible rook location.
         // Returns an array of size 64 corresponding to each of the 64 rook locations on the board. For
         // each location there is a vector containing all possible blockers for that rook placement.
@@ -197,20 +198,37 @@ impl CreateLookUpTables {
         // get the shift range
         let shift_range = match slide_type {
             SlidePieceType::Rook => 50..55,
-            SlidePieceType::Bishop => 57..63
+            SlidePieceType::Bishop => 53..63
         };
         for piece_index in 0..64 {
+            println!("{}", piece_index);
+            // count how many times we went through everything
+            let mut i = 0;
+            // we keep going untill we find at least one magic number
+            let mut found_magic = false;
             // Find the best magic number in combination with shift
             let number2search = ((32.0 - piece_index as f64).abs()*0.1*search_number as f64) as u32 + search_number;
-            for _ in 0..number2search {
+            while i <= number2search || !found_magic {
+                // note the new scope so that way the lock will be dropped afterwards
+                {
+                    // every 100 try's we update if we have already found a magic number in any other thread.
+                    let m = magic_lookup.lock().expect("Couldn't get lock on magic lookup");
+                    if m.magic_numbers[piece_index] != 0 {
+                        found_magic = true;
+                    }
+
+                }
+
                 // Make new magic
                 let magic_number: u64 = rand::thread_rng().gen_range(0..(1 << 63));
                 for shift in shift_range.clone() {
                     // Send the found magic number to the recieving thread
                     match CreateLookUpTables::try_slide_magic_number(&blockers, piece_index, magic_number, shift, &slide_type) {
                         Ok(magic_masks) => {
+                            // We found a magic number!
+                            found_magic = true;
                             // If the new lookuptable is smaller than the old one we will replace it.
-                            let mut m = magic_lookup.lock().expect("Could'nt get lock on magic lookup");
+                            let mut m = magic_lookup.lock().expect("Couldn't get lock on magic lookup");
                             if m.magic_masks[piece_index].len() > magic_masks.len() || m.magic_masks[piece_index].len() == 0 {
                                 println!("{}: magic number {} for piece index {} with shift {} and lenght {}", slide_type.to_string(),
                                 magic_number, piece_index, shift, magic_masks.len());
@@ -222,11 +240,12 @@ impl CreateLookUpTables {
                         Err(_) => {}
                     };
                 }
+                i += 1;
             }
         }
     }
 
-    fn create_slide_piece_table(&mut self, search_number: u32, slide_type: SlidePieceType) -> Result<(), std::io::Error> {
+    pub fn create_slide_piece_table(&mut self, search_number: u32, slide_type: SlidePieceType) -> Result<(), std::io::Error> {
         // search_number: the number of magic numbers to try for each board index.
         // Store the shift numbers
         let blockers = match slide_type {
@@ -267,7 +286,6 @@ impl CreateLookUpTables {
         }
 
         let magic_lookup = Arc::try_unwrap(shared_magic_lookup).unwrap().into_inner().unwrap();
-
         // save the new magic lookup tables.
         CreateLookUpTables::setup_directory("lookuptables");
         match slide_type {
@@ -285,7 +303,7 @@ impl CreateLookUpTables {
         Ok(())
     }
 
-    pub fn create_bishop_pre_table(&mut self) -> Result<(), std::io::Error> {
+    fn create_bishop_pre_table(&mut self) -> Result<(), std::io::Error> {
         // Creates the pre masks for the bishop, that is, for a given index,
         // all possible places where blocker might be. Here we ignore the outer squares because
         // we can either move there, or capture there.
@@ -306,7 +324,7 @@ impl CreateLookUpTables {
         std::env::set_current_dir("../")?;
         Ok(())
     }
-    pub fn get_all_bishop_blocker_patterns(&mut self) {
+    fn get_all_bishop_blocker_patterns(&mut self) {
         // This function gets all the possible bishop blocker patterns for each possible bishop location.
         // Returns an array of size 64 corresponding to each of the 64 bishop locations on the board. For
         // each location there is a vector containing all possible blockers for that bishop placement.
@@ -420,6 +438,8 @@ impl LoadMoves {
         // blockers is the bitboard with bits on enemy and friendly pieces combined, note that 
         // this function will return a bitboard where friendly piece can be captured.
         let viewed_blockers = self.bishop_pre_masks[piece_index] & blockers;
+        println!("visable blocker:\n{}", to_stringboard(viewed_blockers));
+        println!("blockers:\n{}", to_stringboard(blockers));
         let i = viewed_blockers.wrapping_mul(self.bishop_magic_lookup.magic_numbers[piece_index]) >> self.bishop_magic_lookup.shifts[piece_index];
         self.bishop_magic_lookup.magic_masks[piece_index].get(i as usize)
     }
