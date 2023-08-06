@@ -201,7 +201,6 @@ impl CreateLookUpTables {
             SlidePieceType::Bishop => 53..63
         };
         for piece_index in 0..64 {
-            println!("{}", piece_index);
             // count how many times we went through everything
             let mut i = 0;
             // we keep going untill we find at least one magic number
@@ -438,8 +437,6 @@ impl LoadMoves {
         // blockers is the bitboard with bits on enemy and friendly pieces combined, note that 
         // this function will return a bitboard where friendly piece can be captured.
         let viewed_blockers = self.bishop_pre_masks[piece_index] & blockers;
-        println!("visable blocker:\n{}", to_stringboard(viewed_blockers));
-        println!("blockers:\n{}", to_stringboard(blockers));
         let i = viewed_blockers.wrapping_mul(self.bishop_magic_lookup.magic_numbers[piece_index]) >> self.bishop_magic_lookup.shifts[piece_index];
         self.bishop_magic_lookup.magic_masks[piece_index].get(i as usize)
     }
