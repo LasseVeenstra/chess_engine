@@ -370,11 +370,16 @@ class GamePage(tk.Frame):
             # change index depending upon perspective
             if self.boardView == BoardView.Black:
                 i = 63 - i
+            legal_captures = self.coordinator.get_legal_captures(i)
+            legal_non_captures = self.coordinator.get_legal_non_captures(i)
+            if self.boardView == BoardView.Black:
+                legal_captures = [63 - index for index in legal_captures]
+                legal_captures = [63 - index for index in legal_captures]
             # highlight the select square
             self.highlightSquare(i)
             # highlight legal capture and non capture moves
-            self.highlightLegalMoves(self.coordinator.get_legal_captures(i), MoveType.Capture)
-            self.highlightLegalMoves(self.coordinator.get_legal_non_captures(i), MoveType.NonCapture)
+            self.highlightLegalMoves(legal_captures, MoveType.Capture)
+            self.highlightLegalMoves(legal_non_captures, MoveType.NonCapture)
         # load the position
         self.loadPosition(self.coordinator.board_to_string())
 
