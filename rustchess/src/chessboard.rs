@@ -351,16 +351,35 @@ impl Chessboard {
         let captured_piece_type = self.current_position.detect_piece_type(index);
         let mut bb_moving_piece = self.current_position.piece_type2bb(&moving_piece_type);
         let mut bb_captured_piece = self.current_position.piece_type2bb(&captured_piece_type);
-
-        // add and update en-passant target
         match moving_piece_type {
+            // detect en-passant for capture or new es-target
             PieceType::WhitePawn | PieceType::BlackPawn => {
+                // detect en-passant capture
+                match self.current_position.es_target {
+                    Some(target) => {                
+                        if index == target {
+                            match piece_color {
+                                PieceColor::White => self.current_position.bb_bp = subtract_bb(self.current_position.bb_bp, set_bit(0, index + 8)),
+                                PieceColor::Black => self.current_position.bb_bp = subtract_bb(self.current_position.bb_wp, set_bit(0, index - 8)),
+                                _ => {}
+                            }
+                        }
+                    }
+                    None => {}
+                }
+                // update en-passant target
                 // if we move up two squares (or down).
                 if (old_index as i16 - index as i16).abs() == 16 {
                     self.current_position.es_target = Some((old_index + index) / 2);
                 }
+                else {self.current_position.es_target = None;}
             }
-            _ => {self.current_position.es_target = None}
+            // detect castle move
+            PieceType::WhiteKing | PieceType::BlackKing => {
+                // detect kingside castling TODO
+
+            }
+            _ => {self.current_position.es_target = None;}
         };
         
 
