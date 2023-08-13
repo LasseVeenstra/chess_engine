@@ -16,6 +16,15 @@ const WHITE_KNIGHT_STARTING_BB: u64 = 0b01000010_00000000_00000000_00000000_0000
 const WHITE_QUEEN_STARTING_BB: u64 = 0b00001000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
 const WHITE_KING_STARTING_BB: u64 = 0b00010000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
 
+const WHITE_KINGSIDE_CASTLE_MAP: u64 = 0b01100000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const WHITE_QUEENSIDE_CASTLE_MAP: u64 = 0b00001100_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const BLACK_KINGSIDE_CASTLE_MAP: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01100000;
+const BLACK_QUEENSIDE_CASTLE_MAP: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00001100;
+const WHITE_KINGSIDE_CASTLE_GOAL: u64 = 0b01000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const WHITE_QUEENSIDE_CASTLE_GOAL: u64 = 0b00000100_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const BLACK_KINGSIDE_CASTLE_GOAL: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01000000;
+const BLACK_QUEENSIDE_CASTLE_GOAL: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000100;
+
 const FILE_H_BB: u64 = 0b10000000_10000000_10000000_10000000_10000000_10000000_10000000_10000000;
 const FILE_G_BB: u64 = 0b01000000_01000000_01000000_01000000_01000000_01000000_01000000_01000000;
 const FILE_F_BB: u64 = 0b00100000_00100000_00100000_00100000_00100000_00100000_00100000_00100000; 
@@ -39,7 +48,7 @@ enum ToMove {
     White,
     Black
 }
-
+#[derive(Debug)]
 pub enum PieceColor {
     White,
     Black,
@@ -104,8 +113,10 @@ pub struct Position {
     bb_bq: u64, // BitBoard Black Queen
     bb_bk: u64, // BitBoard Black King
     es_target: Option<u8>, // en passant target square can be either None or some index of the target
-    white_castle: bool,
-    black_caslte: bool,
+    white_kingside_castle: bool,
+    black_kingside_castle: bool,
+    white_queenside_castle: bool,
+    black_queenside_castle: bool,
     to_move: ToMove
 }
 
@@ -125,8 +136,10 @@ impl Position {
             bb_bq: 0, 
             bb_bk: 0, 
             es_target: None,
-            white_castle: true,
-            black_caslte: true,
+            white_kingside_castle: true,
+            black_kingside_castle: true,
+            white_queenside_castle: true,
+            black_queenside_castle: true,
             to_move: ToMove::White
         }
     }
@@ -146,8 +159,10 @@ impl Position {
             bb_bq: BLACK_QUEEN_STARTING_BB, 
             bb_bk: BLACK_KING_STARTING_BB, 
             es_target: None,
-            white_castle: true,
-            black_caslte: true,
+            white_kingside_castle: true,
+            black_kingside_castle: true,
+            white_queenside_castle: true,
+            black_queenside_castle: true,
             to_move: ToMove::White
         }
     }
@@ -269,7 +284,23 @@ pub struct Chessboard {
 }
 
 impl Chessboard {
-    fn get_legal_moves(&mut self, index: u8, piece_color: &PieceColor) -> u64 {
+    fn get_heatmap(&mut self, color: &PieceColor) -> u64 {
+        // returns all squares that the color can move to in a bitboard
+        let mut heat = 0;
+        let all_pieces = match color {
+            PieceColor::White => self.current_position.white_pieces(),
+            PieceColor::Black => self.current_position.black_pieces(),
+            _ => 0
+        };
+        // loop over all indices of black squares
+        for index in bb_to_vec(all_pieces) {
+            println!("{}", index);
+            heat |= self.get_legal_moves(index, &color, true);
+        }
+        println!("color heatmap:{:?} \n {}", color, to_stringboard(heat));
+        heat
+    }
+    fn get_legal_moves(&mut self, index: u8, piece_color: &PieceColor, capture_only: bool) -> u64 {
         // index is the index of the piece of which we want to find the legal moves.
         // This function already assumes that the correct player is making the move
         // and that he is not trying to move to his own piece, it also assumes that 
@@ -297,20 +328,29 @@ impl Chessboard {
                     PieceColor::Black => self.pseudo_moves.black_pawn(index as usize),
                     _ => 0
                 };
-                // moves that go directly forwards
-                let front = subtract_bb(pawn_moves & piece_file, blockers);
                 // captures and pieces that block our way
                 let captures = match self.current_position.es_target {
                     //_ => subtract_bb(enemy_pieces & pawn_moves, piece_file),
                     Some(target) => subtract_bb(set_bit(enemy_pieces, target) & pawn_moves, piece_file),
                     None => subtract_bb(enemy_pieces & pawn_moves, piece_file)
                 };
+                // moves that go directly forwards
+                let front = if !capture_only {
+                    subtract_bb(pawn_moves & piece_file, blockers)
+                } else {0};
                 front | captures
             }
             PieceType::BlackKnight | PieceType::WhiteKnight => self.pseudo_moves.knight(index as usize),
             PieceType::BlackBishop | PieceType::WhiteBishop => *self.pseudo_moves.bishop(index as usize, blockers).expect("Couldn't get bishop moves"),
             PieceType::BlackRook | PieceType::WhiteRook => *self.pseudo_moves.rook(index as usize, blockers).expect("Couldn't get rook moves"),
-            PieceType::BlackKing | PieceType::WhiteKing => self.pseudo_moves.king(index as usize),
+            PieceType::BlackKing | PieceType::WhiteKing => {
+                if !capture_only {
+                    self.pseudo_moves.king(index as usize) | self.get_castling_squares(piece_color)
+                }
+                else {
+                    self.pseudo_moves.king(index as usize)
+                }
+            },
             PieceType::WhiteQueen | PieceType::BlackQueen => self.pseudo_moves.queen(index as usize, blockers).expect("Couldn't get queen moves"),
             _ => 0
         };
@@ -325,9 +365,37 @@ impl Chessboard {
         legal_moves
     }
 
+    fn get_castling_squares(&mut self, king_color: &PieceColor) -> u64 {
+        // takes in the color of the king and return a bitboard where the castle square is either a one or zero.
+        let mut castle_squares = 0;
+        let all_pieces = self.current_position.white_pieces() | self.current_position.black_pieces();
+        match king_color {
+            PieceColor::White => {
+                let heat = self.get_heatmap(&PieceColor::Black);
+                if ((heat | all_pieces) & WHITE_KINGSIDE_CASTLE_MAP == 0) && self.current_position.white_kingside_castle {
+                    castle_squares |= WHITE_KINGSIDE_CASTLE_GOAL;
+                }
+                if ((heat | all_pieces) & WHITE_QUEENSIDE_CASTLE_MAP == 0) && self.current_position.white_queenside_castle {
+                    castle_squares |= WHITE_QUEENSIDE_CASTLE_GOAL;
+                }
+            }
+            PieceColor::Black => {
+                let heat = self.get_heatmap(&PieceColor::White);
+                if ((heat | all_pieces) & BLACK_KINGSIDE_CASTLE_MAP == 0) && self.current_position.black_kingside_castle {
+                    castle_squares |= BLACK_KINGSIDE_CASTLE_GOAL;
+                }
+                if ((heat | all_pieces) & BLACK_QUEENSIDE_CASTLE_MAP == 0) && self.current_position.black_queenside_castle {
+                    castle_squares |= BLACK_QUEENSIDE_CASTLE_GOAL;
+                }
+            }
+            _ => {}
+        }
+        castle_squares
+    }
+
     fn check_move_for_legal(&mut self, old_index: u8, index: u8, piece_color: &PieceColor) -> bool {
         // get all legal moves
-        let legal_moves = self.get_legal_moves(old_index, piece_color);
+        let legal_moves = self.get_legal_moves(old_index, piece_color, false);
         // if there is a bit on the legal moves bitboard at index, the move is legal
         if (legal_moves >> index) & 1 == 1 {
             return true
@@ -376,8 +444,61 @@ impl Chessboard {
             }
             // detect castle move
             PieceType::WhiteKing | PieceType::BlackKing => {
-                // detect kingside castling TODO
+                // detect if a castling move has been made
 
+                // white kingside castling
+                if index == 62 {
+                    self.current_position.bb_wr = subtract_bb(self.current_position.bb_wr, set_bit(0, 63));
+                    self.current_position.bb_wr = set_bit(self.current_position.bb_wr, 61);
+                }
+                // white queenside castling
+                if index == 58 {
+                    self.current_position.bb_wr = subtract_bb(self.current_position.bb_wr, set_bit(0, 56));
+                    self.current_position.bb_wr = set_bit(self.current_position.bb_wr, 59);
+                }
+                // black kingside castling
+                if index == 6 {
+                    self.current_position.bb_br = subtract_bb(self.current_position.bb_br, set_bit(0, 7));
+                    self.current_position.bb_br = set_bit(self.current_position.bb_br, 5);
+                }
+                // black queenside castling
+                if index == 2 {
+                    self.current_position.bb_br = subtract_bb(self.current_position.bb_br, set_bit(0, 0));
+                    self.current_position.bb_br = set_bit(self.current_position.bb_br, 3);
+                }
+                // update castling rights
+                match piece_color {
+                    PieceColor::Black => {if old_index != 4 {
+                        self.current_position.black_kingside_castle = false;
+                        self.current_position.black_queenside_castle = false;
+                    }},
+                    PieceColor::White => {if old_index != 60 {
+                        self.current_position.white_kingside_castle = false;
+                        self.current_position.white_queenside_castle = false;
+                    }},
+                    _ => {}
+                }
+
+            }
+            // detect moving of rook to update castling rights
+            PieceType::WhiteRook | PieceType::BlackRook => {
+                // black queenside castling
+                if old_index == 0 || index == 0 {
+                    self.current_position.black_queenside_castle = false;
+                }
+                // black kingside castling
+                else if old_index == 7 || index == 7 {
+                    self.current_position.black_kingside_castle = false;
+                }
+                // white kingside castling
+                else if old_index == 63 || index == 63 {
+                    self.current_position.white_kingside_castle = false;
+                }
+                // white queenside castling
+                else if old_index == 56 || index == 56 {
+                    self.current_position.white_queenside_castle = false;
+                }
+                
             }
             _ => {self.current_position.es_target = None;}
         };
@@ -457,7 +578,7 @@ impl Chessboard {
     pub fn get_legal_captures(&mut self, index: u8) -> Vec<u8> {
         // index must be the index of the piece of which we want to get legal captures
         let piece_color = self.current_position.detect_piece_color(index);
-        let legal_moves = self.get_legal_moves(index, &piece_color);
+        let legal_moves = self.get_legal_moves(index, &piece_color, false);
         // get enemy pieces
         let enemy_pieces = match piece_color {
             PieceColor::White => self.current_position.black_pieces(),
@@ -475,7 +596,7 @@ impl Chessboard {
     pub fn get_legal_non_captures(&mut self, index: u8) -> Vec<u8> {
         // index must be the index of the piece of which we want to get legal captures
         let piece_color = self.current_position.detect_piece_color(index);
-        let legal_moves = self.get_legal_moves(index, &piece_color);
+        let legal_moves = self.get_legal_moves(index, &piece_color, false);
         // get enemy pieces
         let enemy_pieces = match piece_color {
             PieceColor::White => self.current_position.black_pieces(),
