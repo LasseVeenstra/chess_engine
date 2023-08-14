@@ -43,17 +43,11 @@ pub fn bb_to_vec(mut bb: u64) -> Vec<u8> {
     // all bits will be translated to their index and returns 
     // vec with all indices
     let mut res = Vec::new();
-    if bb == 0 {
-        return res
-    }
     while bb != 0 {
         let lsb = get_lsb(bb);
-        for i in 0..64 {
-            if (lsb >> i) & 1 == 1 {
-                res.push(i);
-                break
-            }
-        }
+        // push the index of the lsb, notice that with a rounded down log2 of the lsb
+        // we get the index of the single bit present in lsb
+        res.push((lsb as f64).log2() as u8);
         bb = subtract_bb(bb, lsb);
     }
     res

@@ -294,13 +294,11 @@ impl Chessboard {
         };
         // loop over all indices of black squares
         for index in bb_to_vec(all_pieces) {
-            println!("{}", index);
             heat |= self.get_legal_moves(index, &color, true);
         }
-        println!("color heatmap:{:?} \n {}", color, to_stringboard(heat));
         heat
     }
-    fn get_legal_moves(&mut self, index: u8, piece_color: &PieceColor, capture_only: bool) -> u64 {
+    fn get_legal_moves(&mut self, index: u8, piece_color: &PieceColor, heat_only: bool) -> u64 {
         // index is the index of the piece of which we want to find the legal moves.
         // This function already assumes that the correct player is making the move
         // and that he is not trying to move to his own piece, it also assumes that 
@@ -308,18 +306,19 @@ impl Chessboard {
 
         // Check if we have already calculated the moves before
         match self.legal_moves_cache[index as usize] {
-            Some(legal_moves) => return legal_moves,
+            Some(legal_moves) => if !heat_only {return legal_moves},
             None => {}
         }
-        // set friendly and enemy pieces
-        let (friendly_pieces, enemy_pieces) = match piece_color {
-            PieceColor::White => (self.current_position.white_pieces(), self.current_position.black_pieces()),
-            PieceColor::Black => (self.current_position.black_pieces(), self.current_position.white_pieces()),
-            _ => (0, 0)
+        let piece_type = self.current_position.detect_piece_type(index);
+
+        // set friendly and enemy pieces and enemy color
+        let (friendly_pieces, enemy_pieces, enemy_color, enemy_king) = match piece_color {
+            PieceColor::White => (self.current_position.white_pieces(), self.current_position.black_pieces(), &PieceColor::Black, self.current_position.bb_bk),
+            PieceColor::Black => (self.current_position.black_pieces(), self.current_position.white_pieces(), &PieceColor::White, self.current_position.bb_wk),
+            _ => (0, 0, &PieceColor::None, 0)
         };
         // Get all blockers.
         let blockers = friendly_pieces | enemy_pieces;
-        let piece_type = self.current_position.detect_piece_type(index);
         let mut legal_moves = match piece_type {
             PieceType::WhitePawn | PieceType::BlackPawn => {
                 let piece_file = INDEX2FILE[index as usize];
@@ -328,30 +327,46 @@ impl Chessboard {
                     PieceColor::Black => self.pseudo_moves.black_pawn(index as usize),
                     _ => 0
                 };
+                // moves that go directly forwards
+                let front = if !heat_only {
+                    subtract_bb(pawn_moves & piece_file, blockers) & *self.pseudo_moves.rook(index as usize, blockers).expect("Couldn't get rook moves")  
+                } else {0};
                 // captures and pieces that block our way
                 let captures = match self.current_position.es_target {
                     //_ => subtract_bb(enemy_pieces & pawn_moves, piece_file),
                     Some(target) => subtract_bb(set_bit(enemy_pieces, target) & pawn_moves, piece_file),
-                    None => subtract_bb(enemy_pieces & pawn_moves, piece_file)
+                    None => {
+                        if heat_only {
+                            subtract_bb(pawn_moves, piece_file)
+                        } else {subtract_bb(enemy_pieces & pawn_moves, piece_file)}
+                    }
                 };
-                // moves that go directly forwards
-                let front = if !capture_only {
-                    subtract_bb(pawn_moves & piece_file, blockers)
-                } else {0};
                 front | captures
             }
             PieceType::BlackKnight | PieceType::WhiteKnight => self.pseudo_moves.knight(index as usize),
-            PieceType::BlackBishop | PieceType::WhiteBishop => *self.pseudo_moves.bishop(index as usize, blockers).expect("Couldn't get bishop moves"),
-            PieceType::BlackRook | PieceType::WhiteRook => *self.pseudo_moves.rook(index as usize, blockers).expect("Couldn't get rook moves"),
+            PieceType::BlackBishop | PieceType::WhiteBishop => {
+                if heat_only {
+                    *self.pseudo_moves.bishop(index as usize, subtract_bb(blockers, enemy_king)).expect("Couldn't get bishop moves")
+                } else {*self.pseudo_moves.bishop(index as usize, blockers).expect("Couldn't get bishop moves")}
+            },
+            PieceType::BlackRook | PieceType::WhiteRook => {
+                if heat_only {
+                    *self.pseudo_moves.rook(index as usize, subtract_bb(blockers, enemy_king)).expect("Couldn't get rook moves")    
+                } else {*self.pseudo_moves.rook(index as usize, blockers).expect("Couldn't get rook moves")}
+            },
             PieceType::BlackKing | PieceType::WhiteKing => {
-                if !capture_only {
-                    self.pseudo_moves.king(index as usize) | self.get_castling_squares(piece_color)
+                if !heat_only {
+                    subtract_bb(self.pseudo_moves.king(index as usize), self.get_heatmap(enemy_color)) | self.get_castling_squares(piece_color)
                 }
                 else {
                     self.pseudo_moves.king(index as usize)
                 }
             },
-            PieceType::WhiteQueen | PieceType::BlackQueen => self.pseudo_moves.queen(index as usize, blockers).expect("Couldn't get queen moves"),
+            PieceType::WhiteQueen | PieceType::BlackQueen => {
+                if heat_only {
+                    self.pseudo_moves.queen(index as usize, subtract_bb(blockers, enemy_king)).expect("Couldn't get queen moves")    
+                } else {self.pseudo_moves.queen(index as usize, blockers).expect("Couldn't get queen moves")}
+            },
             _ => 0
         };
 
@@ -359,7 +374,7 @@ impl Chessboard {
         legal_moves = subtract_bb(legal_moves, friendly_pieces);
 
         // store the result in the cache
-        self.legal_moves_cache[index as usize] = Some(legal_moves);
+        if !heat_only {self.legal_moves_cache[index as usize] = Some(legal_moves);}
 
         // return final moves
         legal_moves

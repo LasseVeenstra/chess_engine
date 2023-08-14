@@ -18,7 +18,7 @@ def crop_transparent_pgn(img: Image) -> Image:
     # Crop rectangle and convert to Image
     out = Image.fromarray(img[y0:y1+1, x0:x1+1, :])
     return out
-    
+
 # board view
 class BoardView(Enum):
     White = auto()
@@ -146,10 +146,25 @@ class GamePage(tk.Frame):
         # recieve the coordinator
         self.coordinator = Coordinator()
         
-        # create a list where all the canvas images will be stored
-        self.pieces = []
-        self.highlights = []
-        self.legalmoves = []
+        # create a dictionary with lists where all the canvas images will be stored
+        self.image_ids = {
+            "p": [],
+            "r": [],
+            "n": [],
+            "b": [],
+            "k": [],
+            "q": [],
+            "P": [],
+            "R": [],
+            "N": [],
+            "B": [],
+            "K": [],
+            "Q": [],
+            " ": [],
+            "highlights": [],
+            "legalmoves": [],
+            "capturemoves": []
+        }
         self.boardView = BoardView.White
         self.piece_size = int(BOARD_SIZE / 8)
 
@@ -175,7 +190,10 @@ class GamePage(tk.Frame):
         self.loadImages()
 
         # bind the mouse click
-        self.boardCanvas.bind("<Button-1>", self.selectAndMove)
+        self.boardCanvas.bind("<ButtonPress-1>", self.on_select)
+        # bind the dragging of the pieces
+        self.boardCanvas.bind("<B1-Motion>", self.on_drag)
+        self.boardCanvas.bind("<ButtonRelease-1>", self.on_drop)
         # return to homescreen
         self.homescreen = tk.Button(self, text="homescreen", command=self.to_StartPage,
                                     width=30, height=1, font=("Lucida", 12, "normal"))
@@ -290,38 +308,33 @@ class GamePage(tk.Frame):
                 self.boardView = BoardView.White
         self.update()
 
+    def lift_pieces(self):
+        # bring the pieces above the highlights
+        piece_keys = ["p", "r", "b", "n", "k", "q", "P", "R", "B", "N", "K", "Q"]
+        for piece in [self.image_ids.get(key) for key in piece_keys]:
+            self.boardCanvas.lift(piece)
+    
     def highlightSquare(self, index: int):
         # now we want to highlight this square by adding a highlight piece
         rank, file = index2rank_file(index)
-        x, y = self.board2VisualBoard(rank, file)
-        new_highlight = self.boardCanvas.create_image(x, y, image=self.pieceImages["SelectedSquare"], anchor="nw")
-        self.highlights.append(new_highlight)
-        # bring the pieces above the highlights
-        for piece in self.pieces:
-            self.boardCanvas.lift(piece)
+        self.addPiece("SelectedSquare", rank, file, "highlights")
 
     def highlightLegalMoves(self, indices: list[int], move_type: MoveType):
         # The indices must be a list with integers denoting the indices of the squares to highlight
         match move_type:
             case MoveType.NonCapture:
-                img = self.pieceImages["LegalMove"]
+                key = "legalmoves"
+                img_str = "LegalMove"
             case MoveType.Capture:
-                img = self.pieceImages["CaptureMove"]
+                key = "capturemoves"
+                img_str = "CaptureMove"
         
         for i in indices:
             rank, file = index2rank_file(i)
-            x, y = self.board2VisualBoard(rank, file)
-            new_highlight = self.boardCanvas.create_image(x, y, image=img, anchor="nw")
-            self.highlights.append(new_highlight)
-            
-        # Lift the pieces over the highlights
-        for piece in self.pieces:
-            self.boardCanvas.lift(piece)
+            self.addPiece(img_str, rank, file, key)
+        self.lift_pieces()
 
-    def selectAndMove(self, event):
-        # this function will send to the backend what square was pressed
-        rank, file = self.visualBoard2Board(event.x, event.y)
-        index = rank_file2index(rank, file)
+    def send_input2coordinator(self, index: int):
         # invert the index if we are having blacks perspective
         if self.boardView == BoardView.Black:
             index = 63 - index
@@ -330,13 +343,50 @@ class GamePage(tk.Frame):
             return
         else:
             self.coordinator.recieve_click(index)
+    
+    def on_select(self, event):
+        # this function will send to the backend what square was pressed
+        rank, file = self.visualBoard2Board(event.x, event.y)
+        index = rank_file2index(rank, file)
+        self.send_input2coordinator(index)
+        # update the piece that is selected
+        self.selected, = self.boardCanvas.find_closest(event.x, event.y)
+        self.selected_index = index
+        self.update()
+    
+    def on_drag(self, event):
+        self.boardCanvas.itemconfig(self.selected, anchor="center")
+        self.boardCanvas.coords(self.selected, event.x, event.y)
+    
+    def on_drop(self, event):
+        if self.selected is None:
+            return
+        self.boardCanvas.itemconfig(self.selected, anchor="nw")
+        rank ,file = self.visualBoard2Board(event.x, event.y)
+        x, y = self.board2VisualBoard(rank, file)
+        index = rank_file2index(rank, file)
+        # only if we moved the piece do we want to try to move it
+        if index != self.selected_index:
+            self.boardCanvas.coords(self.selected, x, y)
+            self.send_input2coordinator(index)
+        
         self.update()
             
-            
-    def addPiece(self, piece: str, rank: int, file: int):
+    def addPiece(self, piece: str, rank: int, file: int, key: str):
         x, y = self.board2VisualBoard(rank, file)
-        new_piece = self.boardCanvas.create_image(x, y, image=self.pieceImages[piece], anchor="nw")
-        self.pieces.append(new_piece)
+        # get al hidden pieces
+        hidden_pieces = self.boardCanvas.find_withtag("hiding")
+        # get available pieces of correct type
+        available_pieces = list(set(hidden_pieces) & set(self.image_ids[key]))
+        # no available pieces
+        if len(available_pieces) == 0:
+            new_piece = self.boardCanvas.create_image(x, y, image=self.pieceImages[piece], anchor="nw")
+            self.image_ids[key].append(new_piece)
+        else:
+            new_piece = available_pieces[0]
+            self.boardCanvas.coords(new_piece, x, y)
+            self.boardCanvas.dtag(new_piece, "hiding")
+            self.boardCanvas.itemconfig(new_piece, state="normal")
 
     def loadPosition(self, position: str):
         if self.boardView == BoardView.Black:
@@ -345,7 +395,7 @@ class GamePage(tk.Frame):
         # input is a string of lenght 64
         for index, piece in enumerate(position):
             rank, file = index2rank_file(index)
-            self.addPiece(piece, rank, file)
+            self.addPiece(piece, rank, file, piece)
             
     def resetPosition(self):
         self.coordinator.reset_position()
@@ -360,11 +410,9 @@ class GamePage(tk.Frame):
     
     def update(self):
         # clear pieces and highlights etc
-        for square in self.legalmoves + self.highlights + self.pieces:
-            self.boardCanvas.delete(square)
-        self.pieces = []
-        self.highlights = []
-        self.legalmoves = []
+        for key in self.image_ids:
+            for square in self.image_ids[key]:
+                self.boardCanvas.itemconfig(square, state="hidden", tags=("hiding"))
         # get the select square
         for i in self.coordinator.get_select(): # only option are [] and [i], this is just a trick to use an alternative to Option<>
             # change index depending upon perspective
