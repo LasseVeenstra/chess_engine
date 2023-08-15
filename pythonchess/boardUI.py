@@ -351,6 +351,7 @@ class GamePage(tk.Frame):
         self.send_input2coordinator(index)
         # update the piece that is selected
         self.selected, = self.boardCanvas.find_closest(event.x, event.y)
+        self.boardCanvas.lift(self.selected)
         self.selected_index = index
         self.update()
     
