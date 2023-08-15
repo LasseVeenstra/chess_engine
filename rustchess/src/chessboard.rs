@@ -280,12 +280,21 @@ pub struct Chessboard {
     selected: Selected,
     pseudo_moves: LoadMoves,
     // every time we make a move this will need to be cleared
-    legal_moves_cache: [Option<u64>; 64]
+    legal_moves_cache: [Option<u64>; 64],
+    enemy_heat_cache: Option<u64>
 }
 
 impl Chessboard {
+    fn remove_piece_run_add_piece(&mut self, )  
     fn get_heatmap(&mut self, color: &PieceColor) -> u64 {
-        // returns all squares that the color can move to in a bitboard
+        // returns all squares that the color can move to in a bitboard,
+
+        // check if we have already calculated the enemy heat before
+        match self.enemy_heat_cache {
+            Some(heat) => return heat,
+            None => {}
+        }
+        // calculate the heatmap
         let mut heat = 0;
         let all_pieces = match color {
             PieceColor::White => self.current_position.white_pieces(),
@@ -296,8 +305,42 @@ impl Chessboard {
         for index in bb_to_vec(all_pieces) {
             heat |= self.get_legal_moves(index, &color, true);
         }
+
+        // store the heat in the cache
+        self.enemy_heat_cache = Some(heat);
         heat
     }
+
+    fn get_checking_pieces(&mut self, king_index: usize, color: &PieceColor) -> u64 {
+        // returns a bitboard with all pieces that are currently checking the king
+        let blockers = self.current_position.black_pieces() | self.current_position.white_pieces();
+        let mut attackers: u64 = 0;
+        match color {
+            PieceColor::White => {
+                // add possible knight checks
+                attackers |= self.pseudo_moves.knight(king_index) & self.current_position.bb_bn;
+                // add possible rook, bishop or queen checks
+                attackers |= self.pseudo_moves.queen(king_index, blockers).unwrap() & self.current_position.bb_bq;
+                attackers |= self.pseudo_moves.rook(king_index, blockers).unwrap() & self.current_position.bb_br;
+                attackers |= self.pseudo_moves.bishop(king_index, blockers).unwrap() & self.current_position.bb_bb;
+                // add possible pawn checks
+                attackers |= subtract_bb(self.pseudo_moves.white_pawn(king_index), INDEX2FILE[king_index]) & self.current_position.bb_bp;
+            }
+            PieceColor::Black => {
+                // add possible knight checks
+                attackers |= self.pseudo_moves.knight(king_index) & self.current_position.bb_wn;
+                // add possible rook, bishop or queen checks
+                attackers |= self.pseudo_moves.queen(king_index, blockers).unwrap() & self.current_position.bb_wq;
+                attackers |= self.pseudo_moves.rook(king_index, blockers).unwrap() & self.current_position.bb_wr;
+                attackers |= self.pseudo_moves.bishop(king_index, blockers).unwrap() & self.current_position.bb_wb;
+                // add possible pawn checks
+                attackers |= subtract_bb(self.pseudo_moves.black_pawn(king_index), INDEX2FILE[king_index]) & self.current_position.bb_wp;
+            }
+            _ => {}
+        }
+        attackers
+    }
+
     fn get_legal_moves(&mut self, index: u8, piece_color: &PieceColor, heat_only: bool) -> u64 {
         // index is the index of the piece of which we want to find the legal moves.
         // This function already assumes that the correct player is making the move
@@ -309,8 +352,27 @@ impl Chessboard {
             Some(legal_moves) => if !heat_only {return legal_moves},
             None => {}
         }
+
+        // get the king index
+        let king_index: usize = match piece_color {
+            PieceColor::White => bb_to_vec(self.current_position.bb_wk)[0] as usize,
+            PieceColor::Black => bb_to_vec(self.current_position.bb_bk)[0] as usize,
+            _ => 0
+        };
+
         let piece_type = self.current_position.detect_piece_type(index);
 
+        // if the piece we want to move is not the king and if we are in double check, only king moves
+        // are allowed so we return no legal moves
+        let pieces_giving_check = self.get_checking_pieces(king_index, piece_color);
+        match piece_type {
+            PieceType::BlackKing | PieceType::WhiteKing => {},
+            _ => {
+                if bb_to_vec(pieces_giving_check).len() > 1 {
+                    return 0
+                }
+            }
+        }
         // set friendly and enemy pieces and enemy color
         let (friendly_pieces, enemy_pieces, enemy_color, enemy_king) = match piece_color {
             PieceColor::White => (self.current_position.white_pieces(), self.current_position.black_pieces(), &PieceColor::Black, self.current_position.bb_bk),
@@ -356,7 +418,7 @@ impl Chessboard {
             },
             PieceType::BlackKing | PieceType::WhiteKing => {
                 if !heat_only {
-                    subtract_bb(self.pseudo_moves.king(index as usize), self.get_heatmap(enemy_color)) | self.get_castling_squares(piece_color)
+                    subtract_bb(self.pseudo_moves.king(index as usize), self.get_heatmap(enemy_color) | self.get_defended(enemy_color)) | self.get_castling_squares(king_index, piece_color)
                 }
                 else {
                     self.pseudo_moves.king(index as usize)
@@ -373,6 +435,60 @@ impl Chessboard {
         // remove the ability to capture own pieces
         legal_moves = subtract_bb(legal_moves, friendly_pieces);
 
+        // now we restrict the legal moves if we are in single check
+        if bb_to_vec(pieces_giving_check).len() == 1 {
+            match piece_type {
+                PieceType::BlackKing | PieceType::WhiteKing => {},
+                _ => {
+                    // split the legal moves in capture and non capture
+                    let mut legal_captures = legal_moves & enemy_pieces;
+                    let mut legal_non_captures = subtract_bb(legal_moves, enemy_pieces);
+                    // restrict captures to only captures of the pieces that are giving check
+                    legal_captures &= pieces_giving_check;
+
+                    // the ray to the king from the piece giving check
+                    let index_of_checking_piece = bb_to_vec(pieces_giving_check)[0];
+                    let piece_type_of_checking_piece = self.current_position.detect_piece_type(index_of_checking_piece);
+                    match piece_type_of_checking_piece {
+                        PieceType::BlackPawn | PieceType::WhitePawn => {
+                            // we might still be able to capture the checking pawn with en passant
+                            match self.current_position.es_target {
+                                Some(target) => {
+                                    // if the piece giving check is right below or above the en passant target square then it must be 
+                                    // that that piece just move two up and therefore we still allow en passant capture
+                                    if set_bit(set_bit(0, target - 8), target + 8) & pieces_giving_check != 0 {
+                                        match piece_type {
+                                            PieceType::BlackPawn | PieceType::WhitePawn => {legal_non_captures = set_bit(0, target);},
+                                            _ => {}
+                                        }
+                                    }
+                                },
+                                None => {legal_non_captures = 0;}
+                            }
+                        }
+                        PieceType::BlackKnight | PieceType::WhiteKnight => {
+                            legal_non_captures = 0;
+                        }
+                        _ => {
+                            let ray2king = self.pseudo_moves.queen(king_index, blockers).unwrap() & self.pseudo_moves.queen(index_of_checking_piece as usize, blockers).unwrap();
+                            // only allow moves that block the check
+                            legal_non_captures &= ray2king;
+                        }
+                    }
+                    legal_moves = legal_captures | legal_non_captures;
+                }
+            }
+        }
+        // finally we take into account the possibilty that our piece is currently pinned to the king (an absolute pin)
+        match piece_type {
+            // kings cannot be pinned
+            PieceType::WhiteKing | PieceType::BlackKing => {},
+            _ => {
+
+            }
+        }
+
+
         // store the result in the cache
         if !heat_only {self.legal_moves_cache[index as usize] = Some(legal_moves);}
 
@@ -380,8 +496,81 @@ impl Chessboard {
         legal_moves
     }
 
-    fn get_castling_squares(&mut self, king_color: &PieceColor) -> u64 {
+    fn get_pinned(&mut self, color: &PieceColor) -> u64 {
+        // returns a bitboard with bits on all pieces that are currently pinned to the king
+        let enemy_sliders = match color {
+            PieceColor::White => self.current_position.bb_bb | self.current_position.bb_br | self.current_position.bb_bq,
+            PieceColor::Black => self.current_position.bb_wb | self.current_position.bb_wr | self.current_position.bb_wq,
+            _ => 0
+        };
+        for index in bb_to_vec(enemy_sliders) {
+
+        }
+
+
+        0
+    }
+
+    fn get_defended(&mut self, color: &PieceColor) -> u64 {
+        // returns a bitboard with bits on all pieces that are defended by one of his own pieces
+        let mut defended = 0;
+        let all_pieces = match color {
+            PieceColor::White => self.current_position.white_pieces(),
+            PieceColor::Black => self.current_position.black_pieces(),
+            _ => 0
+        };
+        // loop over all indices of squares
+        for index in bb_to_vec(all_pieces) {
+            defended |= self.get_defended_by_piece(index, color);
+        }
+        defended
+    }
+
+    fn get_defended_by_piece(&mut self, index: u8, piece_color: &PieceColor) -> u64 {
+        let piece_type = self.current_position.detect_piece_type(index);
+
+        // set friendly and enemy pieces and enemy color
+        let (friendly_pieces, enemy_pieces) = match piece_color {
+            PieceColor::White => (self.current_position.white_pieces(), self.current_position.black_pieces()),
+            PieceColor::Black => (self.current_position.black_pieces(), self.current_position.white_pieces()),
+            _ => (0, 0)
+        };
+        // Get all blockers.
+        let blockers = friendly_pieces | enemy_pieces;
+        match piece_type {
+            PieceType::WhitePawn | PieceType::BlackPawn => {
+                let piece_file = INDEX2FILE[index as usize];
+                let pawn_moves = match piece_color {
+                    PieceColor::White => self.pseudo_moves.white_pawn(index as usize),
+                    PieceColor::Black => self.pseudo_moves.black_pawn(index as usize),
+                    _ => 0
+                };
+                subtract_bb(pawn_moves, piece_file) & friendly_pieces
+            }
+            PieceType::BlackKnight | PieceType::WhiteKnight => self.pseudo_moves.knight(index as usize) & friendly_pieces,
+            PieceType::BlackBishop | PieceType::WhiteBishop => {
+                *self.pseudo_moves.bishop(index as usize, blockers).expect("Couldn't get bishop moves") & friendly_pieces
+            },
+            PieceType::BlackRook | PieceType::WhiteRook => {
+                *self.pseudo_moves.rook(index as usize, blockers).expect("Couldn't get rook moves") & friendly_pieces
+            },
+            PieceType::BlackKing | PieceType::WhiteKing => {
+                    self.pseudo_moves.king(index as usize) & friendly_pieces
+            },
+            PieceType::WhiteQueen | PieceType::BlackQueen => {
+                self.pseudo_moves.queen(index as usize, blockers).expect("Couldn't get queen moves") & friendly_pieces
+            },
+            _ => 0
+        }
+    }
+
+    fn get_castling_squares(&mut self, king_index: usize, king_color: &PieceColor) -> u64 {
         // takes in the color of the king and return a bitboard where the castle square is either a one or zero.
+
+        // if we are in check we can't castle
+        if self.get_checking_pieces(king_index, king_color) != 0 {
+            return 0
+        }
         let mut castle_squares = 0;
         let all_pieces = self.current_position.white_pieces() | self.current_position.black_pieces();
         match king_color {
@@ -534,6 +723,7 @@ impl Chessboard {
             _ => ToMove::White
         };
         self.legal_moves_cache = [None; 64];
+        self.enemy_heat_cache = None;
 
         
     }
@@ -566,14 +756,16 @@ impl Chessboard {
         Chessboard { current_position: Position::new_start(),
         selected: Selected::None,
         pseudo_moves: LoadMoves::new(),
-        legal_moves_cache: [None; 64] }
+        legal_moves_cache: [None; 64],
+        enemy_heat_cache: None }
     }
     #[new]
     pub fn new() -> Chessboard {
         Chessboard { current_position: Position::new(),
         selected: Selected::None,
         pseudo_moves: LoadMoves::new(),
-        legal_moves_cache: [None; 64] }
+        legal_moves_cache: [None; 64],
+        enemy_heat_cache: None }
     }
     pub fn to_string(&self) -> String {
         self.current_position.to_string()
