@@ -1,4 +1,4 @@
-use crate::bitboard_helper::to_stringboard;
+use crate::bitboard_helper::*;
 use crate::chessboard_helper::MoveCalculator;
 use rand::Rng;
 use std::io::{BufWriter, Write, BufReader};
@@ -9,11 +9,18 @@ use serde;
 use serde_big_array::BigArray;
 use std::thread;
 use std::sync::{Mutex, Arc};
+use std::cmp;
 
 // Basic struct that is used for writing and parsing the json files.
 #[derive(Serialize, Deserialize, Debug)]
 struct Array64 {
     values: Vec<u64>
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct DirectionTable {
+    #[serde(with = "BigArray")]
+    values: [[u64; 8]; 64]
 }
 
 enum FailedMagicNumberError {
@@ -66,7 +73,9 @@ pub struct CreateLookUpTables {
     rook_pre_masks: Vec<u64>,
     rook_blocker_patterns: [Vec<u64>; 64],
     bishop_pre_masks: Vec<u64>,
-    bishop_blocker_patterns: [Vec<u64>; 64]
+    bishop_blocker_patterns: [Vec<u64>; 64],
+    // all directions on an empty board in order [n, ne, e, se, s, sw, w, nw] for every square
+    direction_masks: [[u64; 8]; 64]
 }
 
 impl CreateLookUpTables {
@@ -88,7 +97,8 @@ impl CreateLookUpTables {
              rook_pre_masks: Vec::new(),
              rook_blocker_patterns: std::array::from_fn(|_| Vec::new()),
              bishop_pre_masks: Vec::new(),
-             bishop_blocker_patterns: std::array::from_fn(|_| Vec::new())}
+             bishop_blocker_patterns: std::array::from_fn(|_| Vec::new()),
+             direction_masks: [[0; 8]; 64]}
     }
     fn setup_directory(filepath: &str) {
         // setup into the correct directory
@@ -387,13 +397,44 @@ impl CreateLookUpTables {
         Ok(())
     }
 
+    pub fn create_direction_table(&mut self) -> Result<(), std::io::Error>{
+        self.direction_masks = [[0; 8]; 64];
+        for i in 0..64 {
+            let (rank, file) = index2rank_file(i).unwrap();
+            // get all directions
+            let up: Vec<u8> = ((rank+1)..9).map(|n|rank_file2index(n, file).unwrap()).collect();
+            let below: Vec<u8> = (1..(rank)).map(|n|rank_file2index(rank-n, file).unwrap()).collect();
+            let right: Vec<u8>  = ((file+1)..9).map(|n|rank_file2index(rank, n).unwrap()).collect();
+            let left: Vec<u8> = (1..(file)).map(|n|rank_file2index(rank, file-n).unwrap()).collect();
+            let below_right: Vec<u8> = (1..cmp::min(9-rank, 9-file)).map(|n|rank_file2index(rank+n,file+n).unwrap()).collect();
+            let below_left: Vec<u8> = (1..cmp::min(9-rank, file)).map(|n|rank_file2index(rank+n,file-n).unwrap()).collect();
+            let up_right: Vec<u8> = (1..cmp::min(rank, 9-file)).map(|n|rank_file2index(rank-n,file+n).unwrap()).collect();
+            let up_left: Vec<u8> = (1..cmp::min(rank, file)).map(|n|rank_file2index(rank-n, file-n).unwrap()).collect();
+            
+            let directions = [up, up_right, right, below_right, below, below_left, left, up_left];
+            for (direction_index, direction) in directions.iter().enumerate() {
+                let mut bb: u64 = 0;
+                for square in direction {
+                    bb = set_bit(bb, *square);
+                }
+                // save the direction in the correct index
+                self.direction_masks[i as usize][direction_index] = bb;
+            }
+        }
+        CreateLookUpTables::setup_directory("lookuptables");
+        CreateLookUpTables::write2file("direction_lookup.json", &DirectionTable{values: self.direction_masks.clone()})?;
+        std::env::set_current_dir("../")?;
+        Ok(())
+    }
+
     pub fn create_all(&mut self, search_number: u32) -> Result<(), std::io::Error> {
         self.create_slide_piece_table(search_number, SlidePieceType::Rook)?;
         self.create_slide_piece_table(search_number, SlidePieceType::Bishop)?;
         self.create_knight_table()?;
         self.create_king_table()?;
         self.create_white_pawn_table()?;
-        self.create_black_pawn_table()
+        self.create_black_pawn_table()?;
+        self.create_direction_table()
     }
 }
 
@@ -409,7 +450,8 @@ pub struct LoadMoves {
     // masks for where possible blockers can be for a given piece location. 
     // Is basically the moves for an empty board while ignoring the outer ranks and files
     rook_pre_masks: [u64; 64],
-    bishop_pre_masks: [u64; 64]
+    bishop_pre_masks: [u64; 64],
+    direction_masks: [[u64; 8]; 64]
 }
 
 impl LoadMoves {
@@ -421,7 +463,8 @@ impl LoadMoves {
             bishop_magic_lookup: LoadMoves::parse_slide_masks("bishop_magic_lookup.json").expect("No bishop magic table found"), 
             rook_magic_lookup: LoadMoves::parse_slide_masks("rook_magic_lookup.json").expect("No rook magic table found"), 
             rook_pre_masks: LoadMoves::parse_non_slide_masks("rook_pre_masks.json").expect("No rook pre masks table found"), 
-            bishop_pre_masks: LoadMoves::parse_non_slide_masks("bishop_pre_masks.json").expect("No bishop pre masks table found") }
+            bishop_pre_masks: LoadMoves::parse_non_slide_masks("bishop_pre_masks.json").expect("No bishop pre masks table found"),
+        direction_masks: LoadMoves::parse_direction_masks("direction_lookup.json").expect("No direction masks table found") }
     }
 
     pub fn rook(&self, piece_index: usize, blockers: u64) -> Option<&u64> {
@@ -491,5 +534,19 @@ impl LoadMoves {
         // Return to the home directory
         std::env::set_current_dir("../")?;
         Ok(u)
+    }
+
+    fn parse_direction_masks(filepath: &str) -> Result<[[u64; 8]; 64], std::io::Error> {
+        CreateLookUpTables::setup_directory("lookuptables");
+        // Before propagating the error we first go back to the home directory.
+        let f = match fs::File::open(filepath) {
+            Ok(res) => res,
+            Err(err) => {std::env::set_current_dir("../")?; return Err(err)}
+        };
+        let reader = BufReader::new(f);
+        let u: DirectionTable = serde_json::from_reader(reader).expect("File that is being read has no struct with DirectionTable.");
+        let result: [[u64; 8]; 64] = u.values.try_into().expect("Could not convert vec to array while parsing json.");
+        std::env::set_current_dir("../")?;
+        Ok(result)
     }
 }

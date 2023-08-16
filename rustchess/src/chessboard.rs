@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use crate::bitboard_helper::*;
+use crate::{bitboard_helper::*, lookuptables};
 use crate::lookuptables::LoadMoves;
 
 
@@ -285,7 +285,19 @@ pub struct Chessboard {
 }
 
 impl Chessboard {
-    fn remove_piece_run_add_piece(&mut self, )  
+    fn remove_piece_run_add_piece<F>(&mut self, pieces: u64, piece_type: &PieceType, f: F)
+    where
+        F: FnOnce()
+        {
+            // first we remove the pieces from the board
+            let board_pieces = self.current_position.piece_type2bb(piece_type);
+            self.current_position.set_bb_of_piece_type(subtract_bb(board_pieces, pieces), piece_type);
+            // now run the closure that has been passed
+            f();
+            // now add the pieces back onto the board
+            self.current_position.set_bb_of_piece_type(board_pieces, piece_type);
+        }
+
     fn get_heatmap(&mut self, color: &PieceColor) -> u64 {
         // returns all squares that the color can move to in a bitboard,
 
@@ -761,6 +773,8 @@ impl Chessboard {
     }
     #[new]
     pub fn new() -> Chessboard {
+        let mut a = lookuptables::CreateLookUpTables::new();
+        a.create_all(20000).unwrap();
         Chessboard { current_position: Position::new(),
         selected: Selected::None,
         pseudo_moves: LoadMoves::new(),
