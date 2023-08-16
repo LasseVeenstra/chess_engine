@@ -515,8 +515,11 @@ impl Chessboard {
             PieceColor::Black => self.current_position.bb_wb | self.current_position.bb_wr | self.current_position.bb_wq,
             _ => 0
         };
-        for index in bb_to_vec(enemy_sliders) {
 
+        // get all pieces that are pinned 
+
+        for index in bb_to_vec(enemy_sliders) {
+            
         }
 
 
@@ -719,7 +722,6 @@ impl Chessboard {
             _ => {self.current_position.es_target = None;}
         };
         
-
         // make the move on the bitboards
         bb_moving_piece = subtract_bb(bb_moving_piece, set_bit(0, old_index));
         bb_moving_piece = set_bit(bb_moving_piece, index);
@@ -773,8 +775,6 @@ impl Chessboard {
     }
     #[new]
     pub fn new() -> Chessboard {
-        let mut a = lookuptables::CreateLookUpTables::new();
-        a.create_all(20000).unwrap();
         Chessboard { current_position: Position::new(),
         selected: Selected::None,
         pseudo_moves: LoadMoves::new(),
