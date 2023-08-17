@@ -285,17 +285,19 @@ pub struct Chessboard {
 }
 
 impl Chessboard {
-    fn remove_piece_run_add_piece<F>(&mut self, pieces: u64, piece_type: &PieceType, f: F)
+    fn remove_piece_run_add_piece<F, T>(&mut self, pieces: u64, piece_type: &PieceType, f: F) -> T
     where
-        F: FnOnce()
+        F: FnOnce() -> T
         {
             // first we remove the pieces from the board
             let board_pieces = self.current_position.piece_type2bb(piece_type);
             self.current_position.set_bb_of_piece_type(subtract_bb(board_pieces, pieces), piece_type);
             // now run the closure that has been passed
-            f();
+            let res = f();
             // now add the pieces back onto the board
             self.current_position.set_bb_of_piece_type(board_pieces, piece_type);
+
+            res
         }
 
     fn get_heatmap(&mut self, color: &PieceColor) -> u64 {
@@ -510,16 +512,22 @@ impl Chessboard {
 
     fn get_pinned(&mut self, color: &PieceColor) -> u64 {
         // returns a bitboard with bits on all pieces that are currently pinned to the king
-        let enemy_sliders = match color {
-            PieceColor::White => self.current_position.bb_bb | self.current_position.bb_br | self.current_position.bb_bq,
-            PieceColor::Black => self.current_position.bb_wb | self.current_position.bb_wr | self.current_position.bb_wq,
+
+        let blockers = self.current_position.black_pieces() & self.current_position.white_pieces();
+
+        let king_index = match color {
+            PieceColor::White => bb_to_vec(self.current_position.bb_wk)[0] as usize,
+            PieceColor::Black => bb_to_vec(self.current_position.bb_bk)[0] as usize,
             _ => 0
         };
 
-        // get all pieces that are pinned 
+        // from the king we slide in every direction to check if there is a pin on that direction
+        for direction_index in 0..8 {
+            // a ray in a certain direction ignoring all pieces on the board
+            let ray = self.pseudo_moves.direction_ray(king_index, direction_index);
 
-        for index in bb_to_vec(enemy_sliders) {
-            
+            let possible_pinned = self.pseudo_moves.queen(king_index, blockers).unwrap() & ray;
+            // now 
         }
 
 

@@ -508,6 +508,12 @@ impl LoadMoves {
         self.black_pawn_masks[piece_index]
     }
 
+    pub fn direction_ray(&self, piece_index: usize, direction: usize) -> u64 {
+        // piece_index must be a number between 0 and 63, not a bitboard with one bit!
+        // directions is index as [north, northeast, east, southeast, south, southwest, west, northwest]
+        self.direction_masks[piece_index][direction]
+    }
+
     fn parse_non_slide_masks(filepath: &str) -> Result<[u64; 64], std::io::Error>{
         CreateLookUpTables::setup_directory("lookuptables");
         // Before propagating the error we first go back to the home directory.
