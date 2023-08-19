@@ -1,4 +1,4 @@
-use crate::bitboard_helper::*;
+use crate::{bitboard_helper::*, lookuptables::LoadMoves};
 use std::cmp;
 
 const BOARD_EDGE_UP: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_11111111;
@@ -145,5 +145,332 @@ impl MoveCalculator {
             self.result = set_bit(self.result, self.piece_index + 16);
         }
         Ok(self.result)
+    }
+}
+
+const BLACK_PAWN_STARTING_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_11111111_00000000;
+const BLACK_ROOK_STARTING_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001;
+const BLACK_BISHOP_STARTING_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00100100;
+const BLACK_KNIGHT_STARTING_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01000010;
+const BLACK_QUEEN_STARTING_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00001000;
+const BLACK_KING_STARTING_BB: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00010000;
+const WHITE_PAWN_STARTING_BB: u64 = 0b00000000_11111111_00000000_00000000_00000000_00000000_00000000_00000000;
+const WHITE_ROOK_STARTING_BB: u64 = 0b10000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const WHITE_BISHOP_STARTING_BB: u64 = 0b00100100_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const WHITE_KNIGHT_STARTING_BB: u64 = 0b01000010_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const WHITE_QUEEN_STARTING_BB: u64 = 0b00001000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+const WHITE_KING_STARTING_BB: u64 = 0b00010000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+
+pub const WHITE_KINGSIDE_CASTLE_MAP: u64 = 0b01100000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+pub const WHITE_QUEENSIDE_CASTLE_MAP: u64 = 0b00001100_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+pub const BLACK_KINGSIDE_CASTLE_MAP: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01100000;
+pub const BLACK_QUEENSIDE_CASTLE_MAP: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00001100;
+pub const WHITE_KINGSIDE_CASTLE_GOAL: u64 = 0b01000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+pub const WHITE_QUEENSIDE_CASTLE_GOAL: u64 = 0b00000100_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+pub const BLACK_KINGSIDE_CASTLE_GOAL: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01000000;
+pub const BLACK_QUEENSIDE_CASTLE_GOAL: u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000100;
+
+const FILE_H_BB: u64 = 0b10000000_10000000_10000000_10000000_10000000_10000000_10000000_10000000;
+const FILE_G_BB: u64 = 0b01000000_01000000_01000000_01000000_01000000_01000000_01000000_01000000;
+const FILE_F_BB: u64 = 0b00100000_00100000_00100000_00100000_00100000_00100000_00100000_00100000; 
+const FILE_E_BB: u64 = 0b00010000_00010000_00010000_00010000_00010000_00010000_00010000_00010000;
+const FILE_D_BB: u64 = 0b00001000_00001000_00001000_00001000_00001000_00001000_00001000_00001000;
+const FILE_C_BB: u64 = 0b00000100_00000100_00000100_00000100_00000100_00000100_00000100_00000100;
+const FILE_B_BB: u64 = 0b00000010_00000010_00000010_00000010_00000010_00000010_00000010_00000010;
+const FILE_A_BB: u64 = 0b00000001_00000001_00000001_00000001_00000001_00000001_00000001_00000001;
+
+// array that converts piece index to file
+pub const INDEX2FILE: [u64; 64] = [FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
+                               FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB];
+
+pub enum ToMove {
+    White,
+    Black
+}
+
+#[derive(Debug)]
+pub enum PieceColor {
+    White,
+    Black,
+    None
+}
+
+#[derive(Debug)]
+pub enum Selected {
+    None,
+    White(u8),
+    Black(u8)
+}
+
+#[derive(Debug)]
+pub enum PieceType {
+    Rook,
+    Knight,
+    Bishop,
+    Queen,
+    King,
+    Pawn,
+    EmptySquare
+}
+
+impl PieceType {
+    pub fn to_char(&self) -> char {
+        match *self {
+            PieceType::Pawn => 'p',
+            PieceType::Rook => 'r',
+            PieceType::Bishop => 'b',
+            PieceType::Knight => 'n',
+            PieceType::King => 'k',
+            PieceType::Queen => 'q',
+            PieceType::EmptySquare => ' '
+        }
+    }
+}
+
+pub struct Pieces {
+    bb_pawns: u64,
+    bb_rooks: u64,
+    bb_knights: u64,
+    bb_bishops: u64,
+    bb_queens: u64,
+    bb_king: u64,
+    all: Option<u64>, // all pieces in one bitboard, the option allows us to cache results,
+    color: PieceColor
+}
+
+impl Pieces {
+    pub fn new() -> Pieces {
+        Pieces { 
+            bb_pawns: 0, 
+            bb_rooks: 0, 
+            bb_knights: 0, 
+            bb_bishops: 0, 
+            bb_queens: 0, 
+            bb_king: 0,
+            all: None,
+            color: PieceColor::None}
+    }
+    pub fn new_white() -> Pieces {
+        let mut pieces = Pieces { 
+            bb_pawns: WHITE_PAWN_STARTING_BB, 
+            bb_rooks: WHITE_ROOK_STARTING_BB, 
+            bb_knights: WHITE_KNIGHT_STARTING_BB, 
+            bb_bishops: WHITE_BISHOP_STARTING_BB, 
+            bb_queens: WHITE_QUEEN_STARTING_BB, 
+            bb_king: WHITE_KING_STARTING_BB,
+            all: None,
+            color: PieceColor::White};
+        pieces.get_all();
+        pieces
+    }
+    pub fn new_black() -> Pieces {
+        let mut pieces = Pieces { 
+            bb_pawns: BLACK_PAWN_STARTING_BB, 
+            bb_rooks: BLACK_ROOK_STARTING_BB, 
+            bb_knights: BLACK_KNIGHT_STARTING_BB, 
+            bb_bishops: BLACK_BISHOP_STARTING_BB, 
+            bb_queens: BLACK_QUEEN_STARTING_BB, 
+            bb_king: BLACK_KING_STARTING_BB,
+            all: None,
+        color: PieceColor::Black};
+        pieces.get_all();
+        pieces
+    }
+    pub fn get_all(&mut self) -> u64 {
+        // returns all the pieces in one bitboard
+        match self.all {
+            Some(all) => all,
+            None => {
+                let all = self.bb_pawns|self.bb_rooks|self.bb_knights|
+                self.bb_bishops|self.bb_queens|self.bb_king;
+                // store value for later use
+                self.all = Some(all);
+                all
+            }
+        }
+    }
+    pub fn get_color(&self) -> &PieceColor {
+        &self.color
+    }
+    // get all the pieces bitboards
+    pub fn get_bb_pawns(&self) -> u64 {
+        self.bb_pawns
+    }
+    pub fn get_bb_rooks(&self) -> u64 {
+        self.bb_rooks
+    }
+    pub fn get_bb_knights(&self) -> u64 {
+        self.bb_knights
+    }
+    pub fn get_bb_bishops(&self) -> u64 {
+        self.bb_bishops
+    }
+    pub fn get_bb_queens(&self) -> u64 {
+        self.bb_queens
+    }
+    pub fn get_bb_king(&self) -> u64 {
+        self.bb_king
+    }
+    // set all the pieces bitboards
+    pub fn set_bb_pawns(&mut self, new_bb: u64){
+        self.bb_pawns = new_bb;
+        self.all = None;
+    }
+    pub fn set_bb_rooks(&mut self, new_bb: u64){
+        self.bb_rooks = new_bb;
+        self.all = None;
+    }
+    pub fn set_bb_knights(&mut self, new_bb: u64){
+        self.bb_knights = new_bb;
+        self.all = None;
+    }
+    pub fn set_bb_bishops(&mut self, new_bb: u64){
+        self.bb_bishops = new_bb;
+        self.all = None;
+    }
+    pub fn set_bb_queens(&mut self, new_bb: u64){
+        self.bb_queens = new_bb;
+        self.all = None;
+    }
+    pub fn set_bb_king(&mut self, new_bb: u64){
+        self.bb_king = new_bb;
+        self.all = None;
+    }
+    pub fn detect_piece_type(&self, piece_index: u8) -> PieceType {
+        // Detects the piece type of the current piece location. Piece index must
+        // be an integer between 0 and 63, not a bitboard with one bit!
+        if (self.bb_pawns >> piece_index) & 1 == 1 {
+            PieceType::Pawn
+        }
+        else if (self.bb_rooks >> piece_index) & 1 == 1 {
+            PieceType::Rook
+        }
+        else if (self.bb_knights >> piece_index) & 1 == 1 {
+            PieceType::Knight
+        }
+        else if (self.bb_bishops >> piece_index) & 1 == 1 {
+            PieceType::Bishop
+        }
+        else if (self.bb_king >> piece_index) & 1 == 1 {
+            PieceType::King
+        }
+        else if (self.bb_queens >> piece_index) & 1 == 1 {
+            PieceType::Queen
+        }
+        else {
+            PieceType::EmptySquare
+        }
+    }
+    pub fn piece_type2bb(&self, piece_type: &PieceType) -> u64 {
+        // note that the returned bitboard is a copy of the stored bitboard,
+        // so it is not a mutable reference!
+        match piece_type {
+            PieceType::Pawn => self.bb_pawns,
+            PieceType::Rook => self.bb_rooks,
+            PieceType::Bishop => self.bb_bishops,
+            PieceType::Knight => self.bb_knights,
+            PieceType::King => self.bb_king,
+            PieceType::Queen => self.bb_queens,
+            PieceType::EmptySquare => 0
+        }
+    }
+
+    pub fn set_bb_of_piece_type(&mut self,bb: u64, piece_type: &PieceType) {
+        match piece_type {
+            PieceType::Pawn => self.set_bb_pawns(bb),
+            PieceType::Rook => self.set_bb_rooks(bb),
+            PieceType::Bishop => self.set_bb_bishops(bb),
+            PieceType::Knight => self.set_bb_knights(bb),
+            PieceType::King => self.set_bb_king(bb),
+            PieceType::Queen => self.set_bb_queens(bb),
+            PieceType::EmptySquare => {}
+        };
+    }
+}
+
+pub struct Position {
+    pub white_pieces: Pieces,
+    pub black_pieces: Pieces,
+    pub es_target: Option<u8>, // en passant target square can be either None or some index of the target
+    pub white_kingside_castle: bool,
+    pub black_kingside_castle: bool,
+    pub white_queenside_castle: bool,
+    pub black_queenside_castle: bool,
+    pub to_move: ToMove,
+}
+
+impl Position {
+    pub fn new() -> Position {
+        Position {
+            white_pieces: Pieces::new(),
+            black_pieces: Pieces::new(),
+            es_target: None,
+            white_kingside_castle: true,
+            black_kingside_castle: true,
+            white_queenside_castle: true,
+            black_queenside_castle: true,
+            to_move: ToMove::White,
+        }
+    }
+    pub fn new_start() -> Position {
+        Position {
+            white_pieces: Pieces::new_white(),
+            black_pieces: Pieces::new_black(),
+            es_target: None,
+            white_kingside_castle: true,
+            black_kingside_castle: true,
+            white_queenside_castle: true,
+            black_queenside_castle: true,
+            to_move: ToMove::White,
+        }
+    }
+    pub fn get_all(&mut self) -> u64 {
+        // returns a bitboard with all pieces, black and white
+        self.black_pieces.get_all() | self.white_pieces.get_all()
+    }
+    
+    pub fn piece_type_color2bb(&self, piece_type: &PieceType, piece_color: &PieceColor) -> u64 {
+        // takes in the piecetype and piececolor and returns the bitboard
+        match piece_color {
+            PieceColor::White => self.white_pieces.piece_type2bb(piece_type),
+            PieceColor::Black => self.black_pieces.piece_type2bb(piece_type),
+            _ => 0
+        }
+    }
+    pub fn set_bb_of_piece_type_color(&mut self, bb: u64, piece_type: &PieceType, piece_color: &PieceColor) {
+        // takes in the piecetype and piececolor and sets the bb to that values
+        match piece_color {
+            PieceColor::White => self.white_pieces.set_bb_of_piece_type(bb, piece_type),
+            PieceColor::Black => self.black_pieces.set_bb_of_piece_type(bb, piece_type),
+            _ => {}
+        }
+    }
+    fn index2char(&self, index: u8) -> char {
+        match self.black_pieces.detect_piece_type(index) {
+            PieceType::EmptySquare => match self.white_pieces.detect_piece_type(index) {
+                PieceType::EmptySquare => ' ',
+                other => other.to_char().to_ascii_uppercase()
+            },
+            other => other.to_char()
+        }
+    }
+    pub fn to_string(&self) -> String {
+        (0..64).map(|i| self.index2char(i).to_string()).collect::<Vec<String>>().join("")
+    }
+    pub fn detect_piece_color(&mut self, piece_index: u8) -> PieceColor {
+        if (self.white_pieces.get_all() >> piece_index) & 1 == 1 {
+            PieceColor::White
+        }
+        else if (self.black_pieces.get_all() >> piece_index) & 1 == 1 {
+            PieceColor::Black
+        }
+        else {PieceColor::None}
+
     }
 }
