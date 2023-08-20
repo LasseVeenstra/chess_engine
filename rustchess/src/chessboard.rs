@@ -3,15 +3,53 @@ use crate::bitboard_helper::*;
 use crate::lookuptables::LoadMoves;
 use crate::chessboard_helper::*;
 
+fn board_notation2index(square: &str) -> Option<u8> {
+    // sets the board notation like e7, b8 to the corresponding index on the board.
+    let mut index = 0;
+    if square.contains('a') {
+        index += 0;
+    }
+    else if square.contains('b') {
+        index += 1;
+    }
+    else if square.contains('c') {
+        index += 2;
+    }
+    else if square.contains('d') {
+        index += 3;
+    }
+    else if square.contains('e') {
+        index += 4;
+    }
+    else if square.contains('f') {
+        index += 5;
+    }
+    else if square.contains('g') {
+        index += 6;
+    }
+    else if square.contains('h') {
+        index += 7;
+    }
+    else {return None}
+
+    let num = square.chars().nth(1)?.to_digit(10)?;
+    index += (8-num)*8;
+
+    Some(index as u8)
+}
+
+
 #[pyclass]
 pub struct Chessboard {
     pos: Position,
+    history: Vec<Position>,
     selected: Selected,
     pseudo_moves: LoadMoves,
     // every time we make a move this will need to be cleared
     legal_moves_cache: [Option<u64>; 64],
     enemy_heat_cache: Option<u64>,
-    pinned_pieces_cache: Option<u64>
+    pinned_pieces_cache: Option<u64>,
+    checking_pieces_cache: Option<u64>
 }
 
 impl Chessboard {
@@ -58,6 +96,13 @@ impl Chessboard {
 
     fn get_checking_pieces(&mut self, king_index: usize, color: &PieceColor) -> u64 {
         // returns a bitboard with all pieces that are currently checking the king
+
+        // check if we still have the checking pieces stored
+        match self.checking_pieces_cache {
+            Some(attackers) => return attackers,
+            None => {}
+        }
+
         let blockers = self.pos.get_all();
         let mut attackers: u64 = 0;
         let enemy = match color {
@@ -73,6 +118,9 @@ impl Chessboard {
         attackers |= self.pseudo_moves.bishop(king_index, blockers).unwrap() & enemy.get_bb_bishops();
         // add possible pawn checks
         attackers |= subtract_bb(self.pseudo_moves.white_pawn(king_index), INDEX2FILE[king_index]) & enemy.get_bb_pawns();
+        
+        // store and return result
+        self.checking_pieces_cache = Some(attackers);
         attackers
     }
 
@@ -83,7 +131,42 @@ impl Chessboard {
             _ => {panic!("Cannot get pieces of no color!")}
         }
     }
+    fn add_special_pawn_moves(&mut self, index: usize, mut legal_moves: u64, enemy_color: &PieceColor, friendly_color: &PieceColor) -> u64 {
+        // this function assumes that there is a pawn present on index
 
+        // this extra situation is needed because of this postion: 8/8/8/8/2k2p1R/8/2K1P3/8 w - - 0 1 after e4.
+        match self.pos.es_target {
+            None => {},
+            Some(target) => {
+                let blockers = self.pos.get_all();
+                let king_index = bb_to_vec(self.pieces(&friendly_color).get_bb_king())[0] as usize;
+                let invisable_pawn = match enemy_color {
+                    PieceColor::White => set_bit(0, target - 8),
+                    PieceColor::Black => set_bit(0, target + 8),
+                    _ => 0
+                };
+                let blockers_without_invis = subtract_bb(blockers, invisable_pawn);
+
+                let enemy = self.pieces(enemy_color);
+                let rook_sliders = enemy.get_bb_queens() | enemy.get_bb_rooks();
+                let enemy_pieces2consider = (self.pseudo_moves.direction_ray(index, 2) |  
+                    self.pseudo_moves.direction_ray(index, 6)) & rook_sliders;
+                for enemy_index in bb_to_vec(enemy_pieces2consider) {
+                    let enemy_moves = *self.pseudo_moves.rook(index, blockers_without_invis).unwrap();
+                    for direction in [2, 6] {
+                        let enemy_ray = self.pseudo_moves.direction_ray(enemy_index as usize, direction) & enemy_moves;
+                        let king_ray = self.pseudo_moves.rook(king_index, blockers_without_invis).unwrap()
+                             & self.pseudo_moves.direction_ray(king_index, (direction + 4) % 8);
+                        // so there is a single piece between the king and a rook type piece, if it a pawn it cannot capture en passant
+                        if enemy_ray & king_ray != 0 {
+                            legal_moves = subtract_bb(legal_moves, set_bit(0, target));
+                        }
+                    }
+                }
+            }
+        }
+        legal_moves
+    }
     fn get_pseudo_legal_moves(&mut self, index: usize, piece_type: &PieceType, friendly_color: &PieceColor, enemy_color: &PieceColor, heat_only: bool) -> u64 {
         // returns pseudo legal moves, that is, legal moves ignoring checks and pins
         // some information we use later
@@ -144,10 +227,9 @@ impl Chessboard {
         }
     }
 
-    fn add_check_moves(&mut self, legal_moves: u64, piece_type: &PieceType, enemy_color: &PieceColor, king_index: usize, pieces_giving_check: u64) -> u64 {
+    fn add_check_moves(&mut self, legal_moves: u64, piece_type: &PieceType, friendly_color: &PieceColor, enemy_color: &PieceColor, pieces_giving_check: u64) -> u64 {
         // assumes that there is a single check present in the position. Then restricts the legal moves given to only moves legal due to the check
         
-        let blockers = self.pos.get_all();
         match piece_type {
             PieceType::King => legal_moves,
             _ => {
@@ -180,12 +262,37 @@ impl Chessboard {
                     PieceType::Knight => {
                         legal_non_captures = 0;
                     }
-                    _ => {
-                        let ray2king = self.pseudo_moves.queen(king_index, blockers).unwrap() & 
-                            self.pseudo_moves.queen(index_of_checking_piece as usize, blockers).unwrap();
-                        // only allow moves that block the check
-                        legal_non_captures &= ray2king;
+                    PieceType::Bishop => {
+                        let bb_king = self.pieces(friendly_color).get_bb_king();
+                        for direction_index in [1, 3, 5, 7] {
+                            let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
+                            if ray & bb_king != 0 {
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(index_of_checking_piece as usize, (direction_index + 4)%8);
+                                break
+                            }
+                        }
                     }
+                    PieceType::Rook => {
+                        let bb_king = self.pieces(friendly_color).get_bb_king();
+                        for direction_index in [0, 2, 4, 6] {
+                            let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
+                            if ray & bb_king != 0 {
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(index_of_checking_piece as usize, (direction_index + 4)%8);
+                                break
+                            }
+                        }
+                    }
+                    PieceType::Queen => {
+                        let bb_king = self.pieces(friendly_color).get_bb_king();
+                        for direction_index in 0..8 {
+                            let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
+                            if ray & bb_king != 0 {
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(index_of_checking_piece as usize, (direction_index + 4)%8);
+                                break
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 legal_captures | legal_non_captures
             }
@@ -230,11 +337,17 @@ impl Chessboard {
 
         // remove the ability to capture own pieces
         legal_moves = subtract_bb(legal_moves, self.pieces(&friendly_color).get_all());
-
         // now we restrict the legal moves if we are in single check
         if bb_to_vec(pieces_giving_check).len() == 1 {
-            legal_moves = self.add_check_moves(legal_moves, &piece_type, &enemy_color, king_index, pieces_giving_check);
+            legal_moves = self.add_check_moves(legal_moves, &piece_type, &friendly_color, &enemy_color, pieces_giving_check);
         }
+
+        // we must also add some special moves if certain situations for the pawns
+        match piece_type {
+            PieceType::Pawn => {legal_moves = self.add_special_pawn_moves(index as usize, legal_moves, &enemy_color, &friendly_color);}
+            _ => {}
+        }
+
         // finally we take into account the possibilty that our piece is currently pinned to the king (an absolute pin)
         let pinned = self.get_pinned(&friendly_color, &enemy_color);
         if (pinned >> index) & 1 == 1 {
@@ -274,8 +387,8 @@ impl Chessboard {
 
         // loop over all enemy sliding pieces
         let enemy = self.pieces(&enemy_color);
-        for index in bb_to_vec(enemy.get_bb_rooks() | enemy.get_bb_queens()) {
-            let enemy_moves = self.pseudo_moves.rook(index as usize, blockers).unwrap();
+        for index in bb_to_vec(enemy.get_bb_rooks() | enemy.get_bb_queens() & *self.pseudo_moves.rook(king_index, 0).unwrap()) {
+            let enemy_moves = *self.pseudo_moves.rook(index as usize, blockers).unwrap();
             // now for each direction we want to go from the king into the opposite direction and check the overlap
             for direction in [0, 2, 4, 6] {
                 let enemy_ray = enemy_moves & self.pseudo_moves.direction_ray(index as usize, direction);
@@ -284,8 +397,8 @@ impl Chessboard {
             }
         }
         let enemy = self.pieces(&enemy_color);
-        for index in bb_to_vec(enemy.get_bb_bishops() | enemy.get_bb_queens()) {
-            let enemy_moves = self.pseudo_moves.bishop(index as usize, blockers).unwrap();
+        for index in bb_to_vec(enemy.get_bb_bishops() | enemy.get_bb_queens() & *self.pseudo_moves.bishop(king_index, 0).unwrap()) {
+            let enemy_moves = *self.pseudo_moves.bishop(index as usize, blockers).unwrap();
             // now for each direction we want to go from the king into the opposite direction and check the overlap
             for direction in [1, 3, 5, 7] {
                 let enemy_ray = enemy_moves & self.pseudo_moves.direction_ray(index as usize, direction);
@@ -395,9 +508,14 @@ impl Chessboard {
         }
     }
 
-    fn move_piece(&mut self, old_index: u8, index: u8, piece_color: &PieceColor) {
-        // when possible move piece from old index to new index
+    fn move_piece(&mut self, old_index: u8, index: u8, piece_color: &PieceColor, on_promotion: &PiecePromotes) {
+        // old_index:    the index of the piece we want to move
+        // index:        index of where we want to move the piece
+        // piece_color:  color of the piece we want to move
+        // on_promotion: in case we promote a pawn, to which piece do we want to promote
         
+        // when possible move piece from old index to new index
+
         // return if the move is not legal
         if !self.check_move_for_legal(old_index, index, piece_color) {
             return
@@ -416,6 +534,7 @@ impl Chessboard {
         let captured_piece_type = self.pieces(&enemy_color).detect_piece_type(index);
         let mut bb_moving_piece = self.pieces(&friendly_color).piece_type2bb(&moving_piece_type);
         let mut bb_captured_piece = self.pieces(&enemy_color).piece_type2bb(&captured_piece_type);
+        let mut promoted: bool = false;
         match moving_piece_type {
             // detect en-passant for capture or new es-target
             PieceType::Pawn => {
@@ -423,8 +542,11 @@ impl Chessboard {
                 match self.pos.es_target {
                     Some(target) => {                
                         if index == target {
-                            let friendly_pawns = self.pieces(&friendly_color).get_bb_pawns();
-                            self.pieces(&friendly_color).set_bb_pawns(subtract_bb(friendly_pawns, set_bit(0, index + 8)));
+                            match enemy_color {
+                                PieceColor::White => self.pos.white_pieces.set_bb_pawns(subtract_bb(bb_captured_piece, set_bit(0, index - 8))),
+                                PieceColor::Black => self.pos.black_pieces.set_bb_pawns(subtract_bb(bb_captured_piece, set_bit(0, index + 8))),
+                                _ => return
+                            };
                         }
                     }
                     None => {}
@@ -435,6 +557,16 @@ impl Chessboard {
                     self.pos.es_target = Some((old_index + index) / 2);
                 }
                 else {self.pos.es_target = None;}
+
+                // we finally also detect promotions
+                let (rank, _) = index2rank_file(index).expect("Index is too high.");
+                if rank == 8 || rank == 1 {
+                    promoted = true;
+                    // now set the promoted piece
+                    let mut promoted_pieces = self.pieces(&friendly_color).piece_type2bb(&on_promotion.to_piece_type());
+                    promoted_pieces = set_bit(promoted_pieces, index);
+                    self.pieces(&friendly_color).set_bb_of_piece_type(promoted_pieces, &on_promotion.to_piece_type());
+                }
             }
             // detect castle move
             PieceType::King => {
@@ -473,6 +605,7 @@ impl Chessboard {
                     }},
                     _ => {}
                 }
+                self.pos.es_target = None;
 
             }
             // detect moving of rook to update castling rights
@@ -493,14 +626,16 @@ impl Chessboard {
                 else if old_index == 56 || index == 56 {
                     self.pos.white_queenside_castle = false;
                 }
-                
+                self.pos.es_target = None;
             }
             _ => {self.pos.es_target = None;}
         };
         
         // make the move on the bitboards
         bb_moving_piece = subtract_bb(bb_moving_piece, set_bit(0, old_index));
-        bb_moving_piece = set_bit(bb_moving_piece, index);
+        if !promoted {
+            bb_moving_piece = set_bit(bb_moving_piece, index);
+        }
         bb_captured_piece = subtract_bb(bb_captured_piece, set_bit(0, index));
         
         // place the new bitboards on the place of the old ones
@@ -512,11 +647,47 @@ impl Chessboard {
             ToMove::White => ToMove::Black,
             _ => ToMove::White
         };
-        self.legal_moves_cache = [None; 64];
-        self.enemy_heat_cache = None;
-        self.pinned_pieces_cache = None;
+        self.clear_cache();
+        self.history.push(self.pos.clone());
 
         
+    }
+    fn all_moves(&mut self) -> Vec<Move> {
+        // this function returns all the legal moves the current player can make in the position
+        let mut all_moves: Vec<Move> = Vec::new();
+        let color = match self.pos.to_move {
+            ToMove::White => PieceColor::White,
+            ToMove::Black => PieceColor::Black
+        };
+        // loop over all pieces that can move
+        let all_pieces = self.pieces(&color).get_all();
+        for piece_index in bb_to_vec(all_pieces) {
+            let piece_type = self.pieces(&color).detect_piece_type(piece_index);
+            // get all legal moves of current piece
+            let legal_moves = self.get_legal_moves(piece_index, false);
+            // now for each possible legal move want to add all moves to the vec
+            for to_index in bb_to_vec(legal_moves) {
+                // notice that when we are going to promote we have more options!
+                match piece_type {
+                    PieceType::Pawn => {
+                        let (rank, _) = index2rank_file(to_index).unwrap();
+                        // we are promoting
+                        if rank == 8 || rank == 1 {
+                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Rook});
+                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Bishop});
+                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Knight});
+                        }
+                        // regardess if we promote or not we always fill the on promotion with a promotion to the queen, though
+                        // it will never be used
+                        all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Queen});
+                    },
+                    _ => {all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Queen});}
+                };
+            }
+        }
+        println!("Number of legal moves: {}", all_moves.len());
+        // return the final moves
+        all_moves
     }
 
     fn select_new(&mut self, index: u8) {
@@ -544,24 +715,43 @@ impl Chessboard {
 impl Chessboard {
     #[staticmethod]
     pub fn new_start() -> Chessboard {
-        Chessboard { pos: Position::new_start(),
+        let mut chessboard = Chessboard { pos: Position::new_start(),
+        history: Vec::new(),
         selected: Selected::None,
         pseudo_moves: LoadMoves::new(),
         legal_moves_cache: [None; 64],
         enemy_heat_cache: None,
-        pinned_pieces_cache: None }
+        pinned_pieces_cache: None,
+        checking_pieces_cache: None };
+        chessboard.history.push(chessboard.pos.clone());
+        chessboard
     }
     #[new]
     pub fn new() -> Chessboard {
         Chessboard { pos: Position::new(),
+            history: Vec::new(),
         selected: Selected::None,
         pseudo_moves: LoadMoves::new(),
         legal_moves_cache: [None; 64],
         enemy_heat_cache: None,
-        pinned_pieces_cache: None }
+        pinned_pieces_cache: None,
+        checking_pieces_cache: None }
     }
     pub fn to_string(&self) -> String {
         self.pos.to_string()
+    }
+
+    pub fn clear(&mut self) {
+        self.pos = Position::new();
+        self.clear_cache();
+    }
+
+    pub fn clear_cache(&mut self) {
+        self.selected = Selected::None;
+        self.legal_moves_cache = [None; 64];
+        self.enemy_heat_cache = None;
+        self.pinned_pieces_cache = None;
+        self.checking_pieces_cache = None;
     }
 
     pub fn get_selected(&self) -> i32 {
@@ -636,7 +826,7 @@ impl Chessboard {
                     ToMove::White => {
                         // if newly selected piece is not white we can move or capture there
                         if !((w_pieces >> index) & 1 == 1) {
-                            self.move_piece(old_index, index, &PieceColor::White);
+                            self.move_piece(old_index, index, &PieceColor::White, &PiecePromotes::Queen);
                         }
                         // remove the highlight
                         self.selected = Selected::None;
@@ -651,7 +841,7 @@ impl Chessboard {
                     ToMove::Black => {
                         // if newly selected piece is not black we can move or capture there
                         if !((b_pieces >> index) & 1 == 1) {
-                            self.move_piece(old_index, index, &PieceColor::Black);
+                            self.move_piece(old_index, index, &PieceColor::Black, &PiecePromotes::Queen);
                         }
                         self.selected = Selected::None;
                     }
@@ -660,8 +850,95 @@ impl Chessboard {
             }
         }
     }
-    pub fn loadFEN(&mut self, FEN: String) {
-        
+    pub fn undo(&mut self) {
+        self.pos = self.history.pop().expect("couldn't get previous position.");
+        self.clear_cache();
+    }
+
+    pub fn load_fen(&mut self, fen: String) {
+        // first clear the board
+        self.clear();
+        // get the parts of the FEN format
+        let parts: Vec<&str> = fen.split_whitespace().collect();
+        let board = match parts.get(0) {
+            Some(board) => board,
+            None => return
+        };
+        let filtered_board = board.replace("/", "");
+        // now load the board
+        let mut index: u32 = 0;
+        for ch in filtered_board.chars() {
+            if ch.is_digit(10) {
+                index += ch.to_digit(10).unwrap();
+            }
+            else if ch.is_ascii_uppercase() {
+                let piece_type = PieceType::from_char(ch.to_ascii_lowercase());
+                let new_bb = set_bit(self.pos.white_pieces.piece_type2bb(&piece_type), index as u8);
+                self.pos.white_pieces.set_bb_of_piece_type(new_bb, &piece_type);
+                index += 1;
+            }
+            else if ch.is_ascii_lowercase() {
+                let piece_type = PieceType::from_char(ch);
+                let new_bb = set_bit(self.pos.black_pieces.piece_type2bb(&piece_type), index as u8);
+                self.pos.black_pieces.set_bb_of_piece_type(new_bb, &piece_type);
+                index += 1;
+            }
+        }
+        // set the person to move
+        self.pos.to_move = match parts.get(1) {
+            None => return,
+            Some(c) => {
+                if c == &"w" {
+                    ToMove::White
+                }
+                else if c == &"b" {
+                    ToMove::Black
+                }
+                else {return}
+            }
+        };
+        // set castling ability
+        match parts.get(2) {
+            None => return,
+            Some(rights) => {
+                if rights.contains('K') {
+                    self.pos.white_kingside_castle = true;
+                } else {self.pos.white_kingside_castle = false;}
+                if rights.contains('Q') {
+                    self.pos.white_queenside_castle = true;
+                } else {self.pos.white_queenside_castle = false;}
+                if rights.contains('k') {
+                    self.pos.black_kingside_castle = true;
+                } else {self.pos.black_kingside_castle = false;}
+                if rights.contains('q') {
+                    self.pos.black_queenside_castle = true;
+                } else {self.pos.black_queenside_castle = false;}
+            }
+        }
+        // set en passant target square
+        self.pos.es_target = match parts.get(3) {
+            None => return,
+            Some(target) => board_notation2index(target)
+        };
+
+        // set half and full move clock
+        self.pos.halfmove_clock = match parts.get(4) {
+            None => return,
+            Some(num) => match num.chars().nth(0) {
+                None => return,
+                Some(i) => i.to_digit(10).unwrap() as u8
+            }
+        };
+        self.pos.fullmove_clock = match parts.get(5) {
+            None => return,
+            Some(num) => match num.chars().nth(0) {
+                None => return,
+                Some(i) => i.to_digit(10).unwrap() as u8
+            }
+        };
+
+
+
     }
 
 }

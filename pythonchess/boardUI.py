@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 from PIL import Image, ImageTk
 from board_coordinator import *
 from enum import Enum, auto
@@ -136,12 +137,10 @@ class StartPage(tk.Frame):
         self.controller.frames[GamePage].recieve_playertypes(self.player1Type, self.player2Type)
 
 
-class GamePage(tk.Frame):    
+class GamePage(ttk.Frame):    
     def __init__(self, parent, controller):
-        bg_color = "#504f5c"
         tk.Frame.__init__(self, parent)
         self.controller = controller
-        self.configure(bg=bg_color)
         
         # recieve the coordinator
         self.coordinator = Coordinator()
@@ -178,13 +177,21 @@ class GamePage(tk.Frame):
         self.pieceImages = {}
 
         # load the chessboard on screen
+        boardFrame = ttk.Frame(self)
         img = Image.open("pythonchess/images/EmptyChessBoard.png")
         img = crop_transparent_pgn(img).resize((BOARD_SIZE, BOARD_SIZE))
         self.boardBackground = ImageTk.PhotoImage(img)
-        self.boardCanvas = tk.Canvas(self, bg="black", width=BOARD_SIZE, height=BOARD_SIZE, bd=0,
+        self.boardCanvas = tk.Canvas(boardFrame, bg="black", width=BOARD_SIZE, height=BOARD_SIZE, bd=0,
                                      highlightthickness=0, relief="ridge")
-        self.boardCanvas.grid(rowspan=7, columnspan=4, row=2, column=0, padx=15, pady=2)
         self.boardCanvas.create_image(0, 0, image=self.boardBackground, anchor="nw")
+        self.boardCanvas.grid(rowspan=1, columnspan=6, row=1, column=0, padx=15, pady=2)
+        # player texts
+        self.player1_text = ttk.Label(boardFrame, font=("Helvetica", 13, "normal"), text="player 1:", anchor="w")
+        self.player1_text.grid(row=0, column=0, pady=0)
+        self.player2_text = ttk.Label(boardFrame, font=("Helvetica", 13, "normal"), text="player 2:", anchor="w")
+        self.player2_text.grid(row=2, column=0, pady=0)
+        
+        boardFrame.grid(row=1, column=0, columnspan=2)
         
         # load piece images
         self.loadImages()
@@ -195,39 +202,43 @@ class GamePage(tk.Frame):
         self.boardCanvas.bind("<B1-Motion>", self.on_drag)
         self.boardCanvas.bind("<ButtonRelease-1>", self.on_drop)
         # return to homescreen
-        self.homescreen = tk.Button(self, text="homescreen", command=self.to_StartPage,
-                                    width=30, height=1, font=("Lucida", 12, "normal"))
+        homescreenFrame = ttk.Frame(self)
+        self.homescreen = ttk.Button(homescreenFrame, text="homescreen", command=self.to_StartPage)
         self.homescreen.grid(row=0, column=1, columnspan=1, pady=2)
-        homescreen_text = tk.Label(self, width=40, height=1, font=("Helvetica", 15, "bold"), bg=bg_color,
-                          fg="white", highlightbackground=bg_color, text="Return to homescreen:")
+        homescreen_text = ttk.Label(homescreenFrame, font=("Helvetica", 15, "bold"), text="Return to homescreen:")
         homescreen_text.grid(row=0, column=0, pady=4)
-        # player texts
-        self.player1_text = tk.Label(self, width=40, height=1, font=("Helvetica", 13, "normal"), bg=bg_color,
-                          fg="white", highlightbackground=bg_color, text="player 1:", justify='left', anchor="w")
-        self.player1_text.grid(row=1, column=0, pady=0)
-        self.player2_text = tk.Label(self, width=40, height=1, font=("Helvetica", 13, "normal"), bg=bg_color,
-                          fg="white", highlightbackground=bg_color, text="player 2:", justify='left', anchor="w")
-        self.player2_text.grid(row=9, column=0, pady=0)
+        
+        homescreenFrame.grid(row=0, column=0, pady=10)
+        
+        # create buttons
+        buttonsFrame = ttk.Frame(self)
+        
         # create a button that resets the board
-        self.reset = tk.Button(self, text="reset", command=self.resetPosition,
-                               width=15, height=2, font=("Lucida", 12, "normal"))
-        self.reset.grid(row=3, column=4, padx=1, pady=5)
+        self.reset = ttk.Button(buttonsFrame, text="reset", command=self.resetPosition)
+        self.reset.grid(row=0, column=0, padx=1, pady=5)
         # create a button that empty's the board
-        self.empty = tk.Button(self, text="empty board", command=self.emptyPosition,
-                               width=15, height=2, font=("Lucida", 12, "normal"))
-        self.empty.grid(row=4, column=4, padx=1, pady=5)
+        self.empty = ttk.Button(buttonsFrame, text="empty board", command=self.emptyPosition)
+        self.empty.grid(row=1, column=0, padx=1, pady=5)
         # create a button for undo
-        self.undoButton = tk.Button(self, text="undo last move", command=self.undo,
-                                    width=15, height=2, font=("Lucida", 12, "normal"))
-        self.undoButton.grid(row=5, column=4, padx=1, pady=10)
+        self.undoButton = ttk.Button(buttonsFrame, text="undo last move", command=self.undo)
+        self.undoButton.grid(row=2, column=0, padx=1, pady=5)
         # create a button for flipping the board
-        self.flipButton = tk.Button(self, text="flip board", command=self.flipBoard,
-                                    width=15, height=2, font=("Lucida", 12, "normal"))
-        self.flipButton.grid(row=6, column=4, padx=1, pady=5)
-
-        self.playButton = tk.Button(self, text="Play!", command=self.startPlay,
-                                    width=15, height=2, font=("Lucida", 12, "normal"))
-        self.playButton.grid(row=2, column=4)
+        self.flipButton = ttk.Button(buttonsFrame, text="flip board", command=self.flipBoard)
+        self.flipButton.grid(row=3, column=0, padx=1, pady=5)
+        self.playButton = ttk.Button(buttonsFrame, text="Play!", command=self.startPlay)
+        self.playButton.grid(row=4, column=0, pady=5)
+        
+        buttonsFrame.grid(row=1, column=2, padx=10)
+        
+        
+        
+        self.fenUploadFrame = tk.Frame(self)
+        self.fenEntry = ttk.Entry(self.fenUploadFrame)
+        self.fenEntry.grid(row=0, column=0)
+        fenSubmit = ttk.Button(self.fenUploadFrame, text="upload FEN", command=self.loadFEN)
+        fenSubmit.grid(row=0, column=1)
+        
+        self.fenUploadFrame.grid(row=2, column=0, padx=5, pady=30)
 
         # to finish the initialization we empty the board
         self.emptyPosition()
@@ -431,6 +442,12 @@ class GamePage(tk.Frame):
             self.highlightLegalMoves(legal_non_captures, MoveType.NonCapture)
         # load the position
         self.loadPosition(self.coordinator.board_to_string())
+    
+    def loadFEN(self):
+        # now load the FEN
+        FEN = self.fenEntry.get()
+        self.coordinator.loadFEN(FEN)
+        self.update()
 
 
 

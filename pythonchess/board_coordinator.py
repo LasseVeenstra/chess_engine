@@ -6,14 +6,11 @@ class PlayerType(Enum):
     Player = auto()
     Computer = auto()
 
-# create enum for response types
-class RespondType(Enum):
-    pass
-
-
 class Coordinator():
-    def __init__(self, ) -> None:
+    def __init__(self, player1=PlayerType.Player, player2=PlayerType.Player) -> None:
         self.chessboard = rst.Chessboard()
+        self.player1 = player1
+        self.player2 = player2
         
     def reset_position(self):
         self.chessboard = rst.Chessboard.new_start()
@@ -38,4 +35,7 @@ class Coordinator():
     def recieve_click(self, index: int):
         # send the select to the chessboard
         self.chessboard.input_select(index)
+        
+    def loadFEN(self, FEN: str):
+        self.chessboard.load_fen(FEN)
             

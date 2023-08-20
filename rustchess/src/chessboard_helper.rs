@@ -189,17 +189,43 @@ pub const INDEX2FILE: [u64; 64] = [FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, F
                                FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
                                FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB];
 
+#[derive(Clone)]
 pub enum ToMove {
     White,
     Black
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PieceColor {
     White,
     Black,
     None
 }
+
+pub enum PiecePromotes {
+    Rook,
+    Knight,
+    Bishop,
+    Queen
+}
+
+impl PiecePromotes {
+    pub fn to_piece_type(&self) -> PieceType {
+        match self {
+            PiecePromotes::Bishop => PieceType::Bishop,
+            PiecePromotes::Knight => PieceType::Knight,
+            PiecePromotes::Queen => PieceType::Queen,
+            PiecePromotes::Rook => PieceType::Rook
+        }
+    }
+}
+
+pub struct Move {
+    pub from: u8,
+    pub to: u8,
+    pub on_promotion: PiecePromotes
+}
+
 
 #[derive(Debug)]
 pub enum Selected {
@@ -231,8 +257,29 @@ impl PieceType {
             PieceType::EmptySquare => ' '
         }
     }
+    pub fn from_char(character: char) -> PieceType {
+        if character == 'p' {
+            PieceType::Pawn
+        }
+        else if character == 'r' {
+            PieceType::Rook
+        }
+        else if character == 'b' {
+            PieceType::Bishop
+        }
+        else if character == 'n' {
+            PieceType::Knight
+        }
+        else if character == 'q' {
+            PieceType::Queen
+        }
+        else if character == 'k' {
+            PieceType::King
+        }
+        else {PieceType::EmptySquare}
+    }
 }
-
+#[derive(Clone)]
 pub struct Pieces {
     bb_pawns: u64,
     bb_rooks: u64,
@@ -245,7 +292,7 @@ pub struct Pieces {
 }
 
 impl Pieces {
-    pub fn new() -> Pieces {
+    pub fn new(piece_color: PieceColor) -> Pieces {
         Pieces { 
             bb_pawns: 0, 
             bb_rooks: 0, 
@@ -254,7 +301,7 @@ impl Pieces {
             bb_queens: 0, 
             bb_king: 0,
             all: None,
-            color: PieceColor::None}
+            color: piece_color}
     }
     pub fn new_white() -> Pieces {
         let mut pieces = Pieces { 
@@ -394,6 +441,7 @@ impl Pieces {
     }
 }
 
+#[derive(Clone)]
 pub struct Position {
     pub white_pieces: Pieces,
     pub black_pieces: Pieces,
@@ -403,19 +451,23 @@ pub struct Position {
     pub white_queenside_castle: bool,
     pub black_queenside_castle: bool,
     pub to_move: ToMove,
+    pub halfmove_clock: u8,
+    pub fullmove_clock: u8
 }
 
 impl Position {
     pub fn new() -> Position {
         Position {
-            white_pieces: Pieces::new(),
-            black_pieces: Pieces::new(),
+            white_pieces: Pieces::new(PieceColor::White),
+            black_pieces: Pieces::new(PieceColor::Black),
             es_target: None,
             white_kingside_castle: true,
             black_kingside_castle: true,
             white_queenside_castle: true,
             black_queenside_castle: true,
             to_move: ToMove::White,
+            halfmove_clock: 0,
+            fullmove_clock: 1
         }
     }
     pub fn new_start() -> Position {
@@ -428,6 +480,8 @@ impl Position {
             white_queenside_castle: true,
             black_queenside_castle: true,
             to_move: ToMove::White,
+            halfmove_clock: 0,
+            fullmove_clock: 1
         }
     }
     pub fn get_all(&mut self) -> u64 {
