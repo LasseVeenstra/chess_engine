@@ -2,6 +2,7 @@ mod bitboard_helper;
 mod chessboard_helper;
 mod chessboard;
 mod lookuptables;
+mod chess_computer;
 use pyo3::prelude::*;
 
 
@@ -16,5 +17,6 @@ fn create_lookup(search_number: usize) -> PyResult<()> {
 fn RustEngine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_lookup, m)?)?;
     m.add_class::<chessboard::Chessboard>()?;
+    
     Ok(())
 }
