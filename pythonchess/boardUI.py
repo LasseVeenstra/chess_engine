@@ -239,9 +239,14 @@ class GamePage(ttk.Frame):
         fenSubmit.grid(row=0, column=1)
         
         self.fenUploadFrame.grid(row=2, column=0, padx=5, pady=30)
+        
+        self.testButton = ttk.Button(self, text="test", command=self.test_positions)
+        self.testButton.grid(row=2, column=1)
 
         # to finish the initialization we empty the board
         self.emptyPosition()
+        self.coordinator.loadFEN("k3r3/8/8/1Q2pPP1/3K4/5NB1/4R3/8 w - e6 0 1")
+        self.update()
 
     def loadImages(self):
         size = self.piece_size
@@ -418,7 +423,12 @@ class GamePage(ttk.Frame):
         self.update()
     
     def undo(self):
-        pass
+        self.coordinator.undo()
+        self.update()
+        
+    def test_positions(self):
+        self.coordinator.chessboard.test_position_depth()
+        self.update()
     
     def update(self):
         # clear pieces and highlights etc

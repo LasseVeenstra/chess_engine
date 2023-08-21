@@ -6,6 +6,7 @@ const BOARD_EDGE_DOWN: u64 = 0b11111111_00000000_00000000_00000000_00000000_0000
 const BOARD_EDGE_RIGHT: u64 = 0b10000000_10000000_10000000_10000000_10000000_10000000_10000000_10000000;
 const BOARD_EDGE_LEFT: u64 = 0b00000001_00000001_00000001_00000001_00000001_00000001_00000001_00000001;
 
+#[derive(Debug, Clone, Copy)]
 pub struct MoveCalculator {
     occupied: u64,
     result: u64,
@@ -189,19 +190,20 @@ pub const INDEX2FILE: [u64; 64] = [FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, F
                                FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB,
                                FILE_A_BB, FILE_B_BB, FILE_C_BB, FILE_D_BB, FILE_E_BB, FILE_F_BB, FILE_G_BB, FILE_H_BB];
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Copy)]
 pub enum ToMove {
     White,
     Black
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum PieceColor {
     White,
     Black,
     None
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum PiecePromotes {
     Rook,
     Knight,
@@ -220,6 +222,7 @@ impl PiecePromotes {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Move {
     pub from: u8,
     pub to: u8,
@@ -227,14 +230,14 @@ pub struct Move {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Selected {
     None,
     White(u8),
     Black(u8)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum PieceType {
     Rook,
     Knight,
@@ -279,7 +282,7 @@ impl PieceType {
         else {PieceType::EmptySquare}
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug, Copy)]
 pub struct Pieces {
     bb_pawns: u64,
     bb_rooks: u64,
@@ -441,7 +444,7 @@ impl Pieces {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Copy)]
 pub struct Position {
     pub white_pieces: Pieces,
     pub black_pieces: Pieces,

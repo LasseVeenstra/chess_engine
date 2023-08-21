@@ -39,6 +39,10 @@ pub fn get_lsb(bb: u64) -> u64 {
     (bb & -bb) as u64
 }
 
+pub fn get_lsb_index(bb: u64) -> usize {
+    (get_lsb(bb) as f64).log2() as usize
+}
+
 pub fn bb_to_vec(mut bb: u64) -> Vec<u8> {
     // all bits will be translated to their index and returns 
     // vec with all indices

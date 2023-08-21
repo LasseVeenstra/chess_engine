@@ -15,6 +15,9 @@ class Coordinator():
     def reset_position(self):
         self.chessboard = rst.Chessboard.new_start()
         
+    def undo(self):
+        self.chessboard.undo()
+        
     def board_to_string(self) -> str:
         return self.chessboard.to_string()
 
