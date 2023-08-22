@@ -1027,16 +1027,16 @@ impl Chessboard {
 
         // set half and full move clock
         self.pos.halfmove_clock = match parts.get(4) {
-            None => return,
+            None => 0,
             Some(num) => match num.chars().nth(0) {
-                None => return,
+                None => 0,
                 Some(i) => i.to_digit(10).unwrap() as u8
             }
         };
         self.pos.fullmove_clock = match parts.get(5) {
-            None => return,
+            None => 1,
             Some(num) => match num.chars().nth(0) {
-                None => return,
+                None => 1,
                 Some(i) => i.to_digit(10).unwrap() as u8
             }
         };
