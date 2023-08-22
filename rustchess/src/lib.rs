@@ -17,6 +17,7 @@ fn create_lookup(search_number: usize) -> PyResult<()> {
 fn RustEngine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_lookup, m)?)?;
     m.add_class::<chessboard::Chessboard>()?;
+    m.add_class::<chess_computer::RandomComputer>()?;
     
     Ok(())
 }

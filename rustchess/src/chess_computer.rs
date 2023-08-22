@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use crate::chessboard::*;
 
 #[pyclass]
-struct RandomComputer {
+pub struct RandomComputer {
     chessboard: Chessboard
 }
 

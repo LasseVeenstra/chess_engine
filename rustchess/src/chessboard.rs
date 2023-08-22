@@ -76,24 +76,25 @@ impl Chessboard {
         // check if we have already calculated the enemy heat before
         match self.enemy_heat_cache {
             Some(heat) => return heat,
-            None => {
-                // calculate the heatmap
-                let mut heat = 0;
-                let all_pieces = match color {
-                    PieceColor::White => self.pos.white_pieces.get_all(),
-                    PieceColor::Black => self.pos.black_pieces.get_all(),
-                    _ => 0
-                };
-                // loop over all indices of black squares
-                for index in bb_to_vec(all_pieces) {
-                    heat |= self.get_legal_moves(index, true);
-                }
-
-                // store the heat in the cache
-                self.enemy_heat_cache = Some(heat);
-                heat
-            }
+            None => {}
         }
+        // calculate the heatmap
+        let mut heat = 0;
+        let (friendly_color, enemy_color) = match color {
+            PieceColor::White => (PieceColor::White, PieceColor::Black),
+            PieceColor::Black => (PieceColor::Black, PieceColor::White),
+            PieceColor::None => {return 0}
+        };
+        let all_pieces = self.pieces(&friendly_color).get_all();
+        // loop over all indices of black squares
+        for index in bb_to_vec(all_pieces) {
+            let piece_type = self.pieces(&friendly_color).detect_piece_type(index);
+            heat |= self.get_pseudo_heat_moves(index as usize, &piece_type, &friendly_color, &enemy_color);
+        }
+
+        // store the heat in the cache
+        self.enemy_heat_cache = Some(heat);
+        heat
     }
 
     fn get_checking_pieces(&mut self, king_index: usize, color: &PieceColor) -> u64 {
@@ -169,9 +170,7 @@ impl Chessboard {
         }
         legal_moves
     }
-    fn get_pseudo_legal_moves(&mut self, index: usize, piece_type: &PieceType, friendly_color: &PieceColor, enemy_color: &PieceColor, heat_only: bool) -> u64 {
-        // returns pseudo legal moves, that is, legal moves ignoring checks and pins
-        // some information we use later
+    fn get_pseudo_heat_moves(&mut self, index: usize, piece_type: &PieceType, friendly_color: &PieceColor, enemy_color: &PieceColor) -> u64 {
         let enemy_king_bb = self.pieces(&enemy_color).get_bb_king();
         let blockers = self.pos.get_all();
 
@@ -183,48 +182,52 @@ impl Chessboard {
                     PieceColor::Black => self.pseudo_moves.black_pawn(index as usize),
                     _ => 0
                 };
+                // captures and pieces that block our way
+                subtract_bb(pawn_moves, piece_file)
+            }
+            PieceType::Knight => self.pseudo_moves.knight(index as usize),
+            PieceType::Bishop => *self.pseudo_moves.bishop(index, subtract_bb(blockers, enemy_king_bb)).expect("Couldn't get bishop moves"),
+            PieceType::Rook => *self.pseudo_moves.rook(index, subtract_bb(blockers, enemy_king_bb)).expect("Couldn't get rook moves"),
+            PieceType::Queen => self.pseudo_moves.queen(index, subtract_bb(blockers, enemy_king_bb)).expect("Couldn't get queen moves"),
+            PieceType::King => self.pseudo_moves.king(index),
+            _ => 0
+        }
+    }
+    
+    fn get_pseudo_legal_moves(&mut self, index: usize, piece_type: &PieceType, friendly_color: &PieceColor, enemy_color: &PieceColor) -> u64 {
+        // returns pseudo legal moves, that is, legal moves ignoring checks and pins
+        // some information we use later
+        let blockers = self.pos.get_all();
+
+        match piece_type {
+            PieceType::Pawn => {
+                let piece_file = INDEX2FILE[index as usize];
+                let pawn_moves = match self.pieces(&friendly_color).get_color() {
+                    PieceColor::White => self.pseudo_moves.white_pawn(index as usize),
+                    PieceColor::Black => self.pseudo_moves.black_pawn(index as usize),
+                    _ => 0
+                };
                 // moves that go directly forwards
-                let front = if !heat_only {
-                    subtract_bb(pawn_moves & piece_file, blockers) & *self.pseudo_moves.rook(index as usize, blockers).expect("Couldn't get rook moves")  
-                } else {0};
+                let front = subtract_bb(pawn_moves & piece_file, blockers) & *self.pseudo_moves.rook(index as usize, blockers).expect("Couldn't get rook moves");
                 // captures and pieces that block our way
                 let captures = match self.pos.es_target {
-                    //_ => subtract_bb(enemy_pieces & pawn_moves, piece_file),
                     Some(target) => subtract_bb(set_bit(self.pieces(&enemy_color).get_all(), target) & pawn_moves, piece_file),
                     None => {
-                        if heat_only {
-                            subtract_bb(pawn_moves, piece_file)
-                        } else {subtract_bb(self.pieces(&enemy_color).get_all() & pawn_moves, piece_file)}
+                        subtract_bb(self.pieces(&enemy_color).get_all() & pawn_moves, piece_file)
                     }
                 };
                 front | captures
             }
             PieceType::Knight => self.pseudo_moves.knight(index as usize),
-            PieceType::Bishop => {
-                if heat_only {
-                    *self.pseudo_moves.bishop(index, subtract_bb(blockers, enemy_king_bb)).expect("Couldn't get bishop moves")
-                } else {*self.pseudo_moves.bishop(index, blockers).expect("Couldn't get bishop moves")}
-            },
-            PieceType::Rook => {
-                if heat_only {
-                    *self.pseudo_moves.rook(index, subtract_bb(blockers, enemy_king_bb)).expect("Couldn't get rook moves")    
-                } else {*self.pseudo_moves.rook(index, blockers).expect("Couldn't get rook moves")}
-            },
-            PieceType::Queen => {
-                if heat_only {
-                    self.pseudo_moves.queen(index, subtract_bb(blockers, enemy_king_bb)).expect("Couldn't get queen moves")    
-                } else {self.pseudo_moves.queen(index, blockers).expect("Couldn't get queen moves")}
-            },
+            PieceType::Bishop => *self.pseudo_moves.bishop(index, blockers).expect("Couldn't get bishop moves"),
+            PieceType::Rook => *self.pseudo_moves.rook(index, blockers).expect("Couldn't get rook moves"),
+            PieceType::Queen => self.pseudo_moves.queen(index, blockers).expect("Couldn't get queen moves"),
             PieceType::King => {
-                if !heat_only {
-                    {subtract_bb(self.pseudo_moves.king(index), self.get_heatmap(&enemy_color)
+                    subtract_bb(self.pseudo_moves.king(index), self.get_heatmap(&enemy_color)
                      | self.get_defended(&enemy_color))
-                      | self.get_castling_squares(index, &friendly_color)}
-                }
-                else {
-                    self.pseudo_moves.king(index)
-                }
-            },
+                      | self.get_castling_squares(index, &friendly_color)
+            }
+            ,
             _ => 0
         }
     }
@@ -301,7 +304,7 @@ impl Chessboard {
         }
     }
 
-    fn get_legal_moves(&mut self, index: u8, heat_only: bool) -> u64 {
+    fn get_legal_moves(&mut self, index: u8) -> u64 {
         // index is the index of the piece of which we want to find the legal moves.
         // This function already assumes that the correct player is making the move
         // and that he is not trying to move to his own piece, it also assumes that 
@@ -309,7 +312,7 @@ impl Chessboard {
 
         // Check if we have already calculated the moves before
         match self.legal_moves_cache[index as usize] {
-            Some(legal_moves) => if !heat_only {return legal_moves},
+            Some(legal_moves) => return legal_moves,
             None => {}
         }
         let (friendly_color, enemy_color) = match self.pos.detect_piece_color(index) {
@@ -333,7 +336,7 @@ impl Chessboard {
                 }
             }
         }
-        let mut legal_moves = self.get_pseudo_legal_moves(index as usize, &piece_type, &friendly_color, &enemy_color, heat_only);
+        let mut legal_moves = self.get_pseudo_legal_moves(index as usize, &piece_type, &friendly_color, &enemy_color);
 
         // remove the ability to capture own pieces
         legal_moves = subtract_bb(legal_moves, self.pieces(&friendly_color).get_all());
@@ -365,7 +368,7 @@ impl Chessboard {
 
 
         // store the result in the cache
-        if !heat_only {self.legal_moves_cache[index as usize] = Some(legal_moves);}
+        self.legal_moves_cache[index as usize] = Some(legal_moves);
 
         // return final moves
         legal_moves
@@ -421,7 +424,6 @@ impl Chessboard {
         }
 
         self.pinned_pieces_cache = Some(pinned);
-        println!("pinned: \n{}", to_stringboard(pinned));
         pinned
 
     }
@@ -517,7 +519,7 @@ impl Chessboard {
             _ => {}
         }
         // get all legal moves
-        let legal_moves = self.get_legal_moves(old_index, false);
+        let legal_moves = self.get_legal_moves(old_index);
         // if there is a bit on the legal moves bitboard at index, the move is legal
         if (legal_moves >> index) & 1 == 1 {
             return true
@@ -694,8 +696,7 @@ impl Chessboard {
         for piece_index in bb_to_vec(all_pieces) {
             let piece_type = self.pieces(&color).detect_piece_type(piece_index);
             // get all legal moves of current piece
-            let legal_moves = self.get_legal_moves(piece_index, false);
-            println!("{}", to_stringboard(legal_moves));
+            let legal_moves = self.get_legal_moves(piece_index);
             // now for each possible legal move want to add all moves to the vec
             for to_index in bb_to_vec(legal_moves) {
                 // notice that when we are going to promote we have more options!
@@ -806,7 +807,7 @@ impl Chessboard {
             PieceColor::None => return vec![],
             _ => {}
         }
-        let legal_moves = self.get_legal_moves(index, false);
+        let legal_moves = self.get_legal_moves(index);
         // get enemy pieces
         let enemy_pieces = match piece_color {
             PieceColor::White => self.pos.black_pieces.get_all(),
@@ -829,7 +830,7 @@ impl Chessboard {
             PieceColor::None => return vec![],
             _ => {}
         }
-        let legal_moves = self.get_legal_moves(index, false);
+        let legal_moves = self.get_legal_moves(index);
         // get enemy pieces
         let enemy_pieces = match piece_color {
             PieceColor::White => self.pos.black_pieces.get_all(),
@@ -913,46 +914,46 @@ impl Chessboard {
 
     pub fn test_position_depth(&mut self) {
         // first we test the standard position
-        // self.load_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".to_string());
-        // println!("\nTESTING ON 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'");
-        // println!("\nDepth 1 ply  Actual:            20");
-        // self.time_legal_positions_on_depth(1);
-        // println!("\nDepth 2 ply  Actual:            400");
-        // self.time_legal_positions_on_depth(2);
-        // println!("\nDepth 3 ply  Actual:            8902");
-        // self.time_legal_positions_on_depth(3);
-        // println!("\nDepth 4 ply  Actual:            197281");
-        // self.time_legal_positions_on_depth(4);
-        // println!("\nDepth 5 ply  Actual:            4865609");
-        // self.time_legal_positions_on_depth(5);
-        // println!("\nDepth 6 ply  Actual:            119060324");
-        // self.time_legal_positions_on_depth(6);
+        self.load_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".to_string());
+        println!("\nTESTING ON 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'");
+        println!("\nDepth 1 ply  Actual:            20");
+        self.time_legal_positions_on_depth(1);
+        println!("\nDepth 2 ply  Actual:            400");
+        self.time_legal_positions_on_depth(2);
+        println!("\nDepth 3 ply  Actual:            8902");
+        self.time_legal_positions_on_depth(3);
+        println!("\nDepth 4 ply  Actual:            197281");
+        self.time_legal_positions_on_depth(4);
+        println!("\nDepth 5 ply  Actual:            4865609");
+        self.time_legal_positions_on_depth(5);
+        println!("\nDepth 6 ply  Actual:            119060324");
+        self.time_legal_positions_on_depth(6);
 
-        // self.load_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1".to_string());
-        // println!("\nTESTING ON 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1'");
-        // println!("\nDepth 1 ply  Actual:            48");
-        // self.time_legal_positions_on_depth(1);
-        // println!("\nDepth 2 ply  Actual:            2039");
-        // self.time_legal_positions_on_depth(2);
-        // println!("\nDepth 3 ply  Actual:            97862");
-        // self.time_legal_positions_on_depth(3);
-        // println!("\nDepth 4 ply  Actual:            4085603");
-        // self.time_legal_positions_on_depth(4);
+        self.load_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1".to_string());
+        println!("\nTESTING ON 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1'");
+        println!("\nDepth 1 ply  Actual:            48");
+        self.time_legal_positions_on_depth(1);
+        println!("\nDepth 2 ply  Actual:            2039");
+        self.time_legal_positions_on_depth(2);
+        println!("\nDepth 3 ply  Actual:            97862");
+        self.time_legal_positions_on_depth(3);
+        println!("\nDepth 4 ply  Actual:            4085603");
+        self.time_legal_positions_on_depth(4);
 
         self.load_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1".to_string());
         println!("\nTESTING ON '8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1'");
         println!("\nDepth 1 ply  Actual:            14");
         self.time_legal_positions_on_depth(1);
-        // println!("\nDepth 2 ply  Actual:            191");
-        // self.time_legal_positions_on_depth(2);
-        // println!("\nDepth 3 ply  Actual:            2812");
-        // self.time_legal_positions_on_depth(3);
-        // println!("\nDepth 4 ply  Actual:            43238");
-        // self.time_legal_positions_on_depth(4);
-        // println!("\nDepth 5 ply  Actual:            674624");
-        // self.time_legal_positions_on_depth(5);
-        // println!("\nDepth 6 ply  Actual:            11030083");
-        // self.time_legal_positions_on_depth(6);
+        println!("\nDepth 2 ply  Actual:            191");
+        self.time_legal_positions_on_depth(2);
+        println!("\nDepth 3 ply  Actual:            2812");
+        self.time_legal_positions_on_depth(3);
+        println!("\nDepth 4 ply  Actual:            43238");
+        self.time_legal_positions_on_depth(4);
+        println!("\nDepth 5 ply  Actual:            674624");
+        self.time_legal_positions_on_depth(5);
+        println!("\nDepth 6 ply  Actual:            11030083");
+        self.time_legal_positions_on_depth(6);
 
 
     }
