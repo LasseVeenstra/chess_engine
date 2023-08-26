@@ -222,11 +222,85 @@ impl PiecePromotes {
     }
 }
 
+pub fn board_notation2index(square: &str) -> Option<u8> {
+    // sets the board notation like e7, b8 to the corresponding index on the board.
+    let mut index = 0;
+    if square.contains('a') {
+        index += 0;
+    }
+    else if square.contains('b') {
+        index += 1;
+    }
+    else if square.contains('c') {
+        index += 2;
+    }
+    else if square.contains('d') {
+        index += 3;
+    }
+    else if square.contains('e') {
+        index += 4;
+    }
+    else if square.contains('f') {
+        index += 5;
+    }
+    else if square.contains('g') {
+        index += 6;
+    }
+    else if square.contains('h') {
+        index += 7;
+    }
+    else {return None}
+
+    let num = square.chars().nth(1)?.to_digit(10)?;
+    index += (8-num)*8;
+
+    Some(index as u8)
+}
+
+pub fn index2board_notation(index: u8) -> String {
+    let (rank, file) = index2rank_file(index).unwrap();
+    let mut notation = String::new();
+    if file == 1 {
+        notation.push('a')
+    }
+    else if file == 2 {
+        notation.push('b')
+    }
+    else if file == 3 {
+        notation.push('c')
+    }
+    else if file == 4 {
+        notation.push('d')
+    }
+    else if file == 5 {
+        notation.push('e')
+    }
+    else if file == 6 {
+        notation.push('f')
+    }
+    else if file == 7 {
+        notation.push('g')
+    }
+    else if file == 8 {
+        notation.push('h')
+    }
+    notation.push(char::from_digit(rank as u32, 10).unwrap());
+    notation
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Move {
     pub from: u8,
     pub to: u8,
     pub on_promotion: PiecePromotes
+}
+
+impl Move {
+    pub fn to_string(&self) -> String {
+        let mut res = index2board_notation(self.from);
+        res.push_str(index2board_notation(self.to).as_str());
+        res
+    }
 }
 
 

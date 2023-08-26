@@ -3,42 +3,6 @@ use crate::bitboard_helper::*;
 use crate::lookuptables::LoadMoves;
 use crate::chessboard_helper::*;
 
-fn board_notation2index(square: &str) -> Option<u8> {
-    // sets the board notation like e7, b8 to the corresponding index on the board.
-    let mut index = 0;
-    if square.contains('a') {
-        index += 0;
-    }
-    else if square.contains('b') {
-        index += 1;
-    }
-    else if square.contains('c') {
-        index += 2;
-    }
-    else if square.contains('d') {
-        index += 3;
-    }
-    else if square.contains('e') {
-        index += 4;
-    }
-    else if square.contains('f') {
-        index += 5;
-    }
-    else if square.contains('g') {
-        index += 6;
-    }
-    else if square.contains('h') {
-        index += 7;
-    }
-    else {return None}
-
-    let num = square.chars().nth(1)?.to_digit(10)?;
-    index += (8-num)*8;
-
-    Some(index as u8)
-}
-
-
 #[pyclass]
 pub struct Chessboard {
     pos: Position,
@@ -120,7 +84,15 @@ impl Chessboard {
         attackers |= self.pseudo_moves.rook(king_index, blockers).unwrap() & enemy.get_bb_rooks();
         attackers |= self.pseudo_moves.bishop(king_index, blockers).unwrap() & enemy.get_bb_bishops();
         // add possible pawn checks
-        attackers |= subtract_bb(self.pseudo_moves.white_pawn(king_index), INDEX2FILE[king_index]) & enemy.get_bb_pawns();
+        match color {
+            PieceColor::White => {
+                attackers |= subtract_bb(self.pseudo_moves.white_pawn(king_index), INDEX2FILE[king_index]) & enemy.get_bb_pawns();
+            }
+            PieceColor::Black => {
+                attackers |= subtract_bb(self.pseudo_moves.black_pawn(king_index), INDEX2FILE[king_index]) & enemy.get_bb_pawns();
+            }
+            _ => {}
+        }
         
         // store and return result
         self.checking_pieces_cache = Some(attackers);
@@ -272,7 +244,7 @@ impl Chessboard {
                         for direction_index in [1, 3, 5, 7] {
                             let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
                             if ray & bb_king != 0 {
-                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(index_of_checking_piece as usize, (direction_index + 4)%8);
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(bb_to_vec(bb_king)[0] as usize, (direction_index + 4)%8);
                                 break
                             }
                         }
@@ -282,7 +254,7 @@ impl Chessboard {
                         for direction_index in [0, 2, 4, 6] {
                             let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
                             if ray & bb_king != 0 {
-                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(index_of_checking_piece as usize, (direction_index + 4)%8);
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(bb_to_vec(bb_king)[0] as usize, (direction_index + 4)%8);
                                 break
                             }
                         }
@@ -292,7 +264,7 @@ impl Chessboard {
                         for direction_index in 0..8 {
                             let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
                             if ray & bb_king != 0 {
-                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(index_of_checking_piece as usize, (direction_index + 4)%8);
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(bb_to_vec(bb_king)[0] as usize, (direction_index + 4)%8);
                                 break
                             }
                         }
@@ -495,7 +467,7 @@ impl Chessboard {
                 if ((heat | all_pieces) & WHITE_KINGSIDE_CASTLE_MAP == 0) && self.pos.white_kingside_castle {
                     castle_squares |= WHITE_KINGSIDE_CASTLE_GOAL;
                 }
-                if ((heat | all_pieces) & WHITE_QUEENSIDE_CASTLE_MAP == 0) && self.pos.white_queenside_castle {
+                if (heat & WHITE_QUEENSIDE_CASTLE_MAP == 0) && (all_pieces & set_bit(WHITE_QUEENSIDE_CASTLE_MAP, 57) == 0) && self.pos.white_queenside_castle {
                     castle_squares |= WHITE_QUEENSIDE_CASTLE_GOAL;
                 }
             }
@@ -504,7 +476,7 @@ impl Chessboard {
                 if ((heat | all_pieces) & BLACK_KINGSIDE_CASTLE_MAP == 0) && self.pos.black_kingside_castle {
                     castle_squares |= BLACK_KINGSIDE_CASTLE_GOAL;
                 }
-                if ((heat | all_pieces) & BLACK_QUEENSIDE_CASTLE_MAP == 0) && self.pos.black_queenside_castle {
+                if (heat & BLACK_QUEENSIDE_CASTLE_MAP == 0) && (all_pieces & set_bit(BLACK_QUEENSIDE_CASTLE_MAP, 1) == 0) && self.pos.black_queenside_castle {
                     castle_squares |= BLACK_QUEENSIDE_CASTLE_GOAL;
                 }
             }
@@ -563,7 +535,7 @@ impl Chessboard {
         // of the piece we want to capture (note that these are not by reference but a copy, so we must
         // replace them later.)
         let moving_piece_type = self.pieces(&friendly_color).detect_piece_type(old_index);
-        let captured_piece_type = self.pieces(&enemy_color).detect_piece_type(index);
+        let mut captured_piece_type = self.pieces(&enemy_color).detect_piece_type(index);
         let mut bb_moving_piece = self.pieces(&friendly_color).piece_type2bb(&moving_piece_type);
         let mut bb_captured_piece = self.pieces(&enemy_color).piece_type2bb(&captured_piece_type);
         let mut promoted: bool = false;
@@ -574,9 +546,11 @@ impl Chessboard {
                 match self.pos.es_target {
                     Some(target) => {                
                         if index == target {
+                            captured_piece_type = PieceType::Pawn;
+                            bb_captured_piece = self.pieces(&enemy_color).get_bb_pawns();
                             match enemy_color {
-                                PieceColor::White => self.pos.white_pieces.set_bb_pawns(subtract_bb(bb_captured_piece, set_bit(0, index - 8))),
-                                PieceColor::Black => self.pos.black_pieces.set_bb_pawns(subtract_bb(bb_captured_piece, set_bit(0, index + 8))),
+                                PieceColor::White => bb_captured_piece = subtract_bb(bb_captured_piece, set_bit(0, index - 8)),
+                                PieceColor::Black => bb_captured_piece = subtract_bb(bb_captured_piece, set_bit(0, index + 8)),
                                 _ => return
                             };
                         }
@@ -603,7 +577,6 @@ impl Chessboard {
             // detect castle move
             PieceType::King => {
                 // detect if a castling move has been made
-
                 // white kingside castling
                 let mut friendly_rooks = self.pieces(&friendly_color).get_bb_rooks();
                 if index == 62 {
@@ -611,7 +584,7 @@ impl Chessboard {
                     self.pieces(&friendly_color).set_bb_rooks(set_bit(friendly_rooks, 61));
                 }
                 // white queenside castling
-                if index == 58 {
+                else if index == 58 {
                     friendly_rooks = subtract_bb(friendly_rooks, set_bit(0, 56));
                     self.pieces(&friendly_color).set_bb_rooks(set_bit(friendly_rooks, 59));
                 }
@@ -627,41 +600,38 @@ impl Chessboard {
                 }
                 // update castling rights
                 match piece_color {
-                    PieceColor::Black => {if old_index != 4 {
+                    PieceColor::Black => {
                         self.pos.black_kingside_castle = false;
                         self.pos.black_queenside_castle = false;
-                    }},
-                    PieceColor::White => {if old_index != 60 {
+                    },
+                    PieceColor::White => {
                         self.pos.white_kingside_castle = false;
                         self.pos.white_queenside_castle = false;
-                    }},
+                    },
                     _ => {}
                 }
                 self.pos.es_target = None;
 
             }
-            // detect moving of rook to update castling rights
-            PieceType::Rook => {
-                // black queenside castling
-                if old_index == 0 || index == 0 {
-                    self.pos.black_queenside_castle = false;
-                }
-                // black kingside castling
-                else if old_index == 7 || index == 7 {
-                    self.pos.black_kingside_castle = false;
-                }
-                // white kingside castling
-                else if old_index == 63 || index == 63 {
-                    self.pos.white_kingside_castle = false;
-                }
-                // white queenside castling
-                else if old_index == 56 || index == 56 {
-                    self.pos.white_queenside_castle = false;
-                }
-                self.pos.es_target = None;
-            }
             _ => {self.pos.es_target = None;}
         };
+        // detect capturing or moving of a rook
+        // black queenside castling
+        if old_index == 0 || index == 0 {
+            self.pos.black_queenside_castle = false;
+        }
+        // black kingside castling
+        else if old_index == 7 || index == 7 {
+            self.pos.black_kingside_castle = false;
+        }
+        // white kingside castling
+        else if old_index == 63 || index == 63 {
+            self.pos.white_kingside_castle = false;
+        }
+        // white queenside castling
+        else if old_index == 56 || index == 56 {
+            self.pos.white_queenside_castle = false;
+        }
         
         // make the move on the bitboards
         bb_moving_piece = subtract_bb(bb_moving_piece, set_bit(0, old_index));
@@ -912,6 +882,15 @@ impl Chessboard {
         println!("Depth {} ply  Calculated result: {} positions  Time: {:.2?}", depth, result, elapsed);
     }
 
+    pub fn debug_depth(&mut self, depth: u8) {
+        let moves = self.all_moves();
+        for current_move in moves {
+            self.move_piece(current_move);
+            println!("{}: {}", current_move.to_string(), self.legal_positions_on_depth(depth - 1));
+            self.undo();
+        }
+    }
+
     pub fn test_position_depth(&mut self) {
         // first we test the standard position
         self.load_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".to_string());
@@ -939,6 +918,8 @@ impl Chessboard {
         self.time_legal_positions_on_depth(3);
         println!("\nDepth 4 ply  Actual:            4085603");
         self.time_legal_positions_on_depth(4);
+        println!("\nDepth 5 ply  Actual:            193690690");
+        self.time_legal_positions_on_depth(5);
 
         self.load_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1".to_string());
         println!("\nTESTING ON '8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1'");
@@ -954,6 +935,46 @@ impl Chessboard {
         self.time_legal_positions_on_depth(5);
         println!("\nDepth 6 ply  Actual:            11030083");
         self.time_legal_positions_on_depth(6);
+
+        self.load_fen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1".to_string());
+        println!("\nTESTING ON 'r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1'");
+        println!("\nDepth 1 ply  Actual:            6");
+        self.time_legal_positions_on_depth(1);
+        println!("\nDepth 2 ply  Actual:            264");
+        self.time_legal_positions_on_depth(2);
+        println!("\nDepth 3 ply  Actual:            9467");
+        self.time_legal_positions_on_depth(3);
+        println!("\nDepth 4 ply  Actual:            422333");
+        self.time_legal_positions_on_depth(4);
+        println!("\nDepth 5 ply  Actual:            15833292");
+        self.time_legal_positions_on_depth(5);
+
+        self.load_fen("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8".to_string());
+        println!("\nTESTING ON 'rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8'");
+        println!("\nDepth 1 ply  Actual:            44");
+        self.time_legal_positions_on_depth(1);
+        println!("\nDepth 2 ply  Actual:            1486");
+        self.time_legal_positions_on_depth(2);
+        println!("\nDepth 3 ply  Actual:            62379");
+        self.time_legal_positions_on_depth(3);
+        println!("\nDepth 4 ply  Actual:            2103487");
+        self.time_legal_positions_on_depth(4);
+        println!("\nDepth 5 ply  Actual:            89941194");
+        self.time_legal_positions_on_depth(5);
+
+        self.load_fen("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10".to_string());
+        println!("\nTESTING ON 'r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10'");
+        println!("\nDepth 1 ply  Actual:            46");
+        self.time_legal_positions_on_depth(1);
+        println!("\nDepth 2 ply  Actual:            2079");
+        self.time_legal_positions_on_depth(2);
+        println!("\nDepth 3 ply  Actual:            89890");
+        self.time_legal_positions_on_depth(3);
+        println!("\nDepth 4 ply  Actual:            3894594");
+        self.time_legal_positions_on_depth(4);
+        println!("\nDepth 5 ply  Actual:            164075551");
+        self.time_legal_positions_on_depth(5);
+
 
 
     }
