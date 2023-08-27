@@ -19,4 +19,10 @@ impl<T: RecieveAndReturnMove> Coordinator<T> {
     pub fn new_computer_vs_computer(comp1: T, comp2: T) -> Coordinator<T> {
         Coordinator { computer1: Some(comp1), computer2: Some(comp2), chessboard: Chessboard::new_start() }
     }
+    pub fn new_human_vs_computer(comp2: T) -> Coordinator<T> {
+        Coordinator { computer1: None, computer2: Some(comp2), chessboard: Chessboard::new_start() }
+    }
+    pub fn new_computer_vs_human(comp1: T) -> Coordinator<T> {
+        Coordinator { computer1: Some(comp1), computer2: None, chessboard: Chessboard::new_start() }
+    }
 }
