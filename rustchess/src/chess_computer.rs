@@ -27,15 +27,3 @@ impl RandomComputer {
         RandomComputer { chessboard: Chessboard::new_start() }
     }
 }
-
-pub struct Human {
-    human_board: HumanChessboardInteraction
-}
-
-impl RecieveAndReturnMove for Human {
-    fn recieve_and_return_move(&mut self, new_move: Move) -> Move {
-        // 
-        self.human_board.input_select(new_move.from);
-        self.human_board.input_select(new_move.to);
-    }
-}
