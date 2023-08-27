@@ -245,7 +245,6 @@ class GamePage(ttk.Frame):
 
         # to finish the initialization we empty the board
         self.emptyPosition()
-        self.coordinator.loadFEN("k3r3/8/8/1Q2pPP1/3K4/5NB1/4R3/8 w - e6 0 1")
         self.update()
 
     def loadImages(self):
