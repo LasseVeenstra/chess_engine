@@ -8,12 +8,12 @@ class PlayerType(Enum):
 
 class Coordinator():
     def __init__(self, player1=PlayerType.Player, player2=PlayerType.Player) -> None:
-        self.chessboard = rst.Chessboard()
+        self.chessboard = rst.HumanChessboardInteraction()
         self.player1 = player1
         self.player2 = player2
         
     def reset_position(self):
-        self.chessboard = rst.Chessboard.new_start()
+        self.chessboard = rst.HumanChessboardInteraction.new_start()
         
     def undo(self):
         self.chessboard.undo()
@@ -40,5 +40,5 @@ class Coordinator():
         self.chessboard.input_select(index)
         
     def loadFEN(self, FEN: str):
-        self.chessboard.load_fen(FEN)
+        self.HumanChessboardInteraction.load_fen(FEN)
             

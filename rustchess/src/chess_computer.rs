@@ -1,21 +1,41 @@
 use pyo3::prelude::*;
 use crate::chessboard::*;
+use crate::chessboard_helper::*;
+use rand::seq::SliceRandom;
 
-#[pyclass]
+pub trait RecieveAndReturnMove {
+    // This function should recieve a move and then return the move the computer(or human) wants to make
+    fn recieve_and_return_move(&mut self, new_move: Move) -> Move;
+}
+
 pub struct RandomComputer {
     chessboard: Chessboard
 }
 
-impl RandomComputer {
-    
+impl RecieveAndReturnMove for RandomComputer {
+    fn recieve_and_return_move(&mut self, new_move: Move) -> Move {
+        self.chessboard.move_piece(new_move);
+        // now we get all legal moves
+        let moves = self.chessboard.all_moves();
+        // choose a random move
+        *moves.choose(&mut rand::thread_rng()).expect("No moves available.")
+    }
 }
-#[pymethods]
+
 impl RandomComputer {
-    #[new]
     pub fn new() -> RandomComputer {
         RandomComputer { chessboard: Chessboard::new_start() }
     }
-    pub fn get_move_and_postion(&self) -> String {
-        "asd".to_string()
+}
+
+pub struct Human {
+    human_board: HumanChessboardInteraction
+}
+
+impl RecieveAndReturnMove for Human {
+    fn recieve_and_return_move(&mut self, new_move: Move) -> Move {
+        // 
+        self.human_board.input_select(new_move.from);
+        self.human_board.input_select(new_move.to);
     }
 }
