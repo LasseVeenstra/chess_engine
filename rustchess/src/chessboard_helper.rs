@@ -208,7 +208,7 @@ pub enum PiecePromotes {
     Rook,
     Knight,
     Bishop,
-    Queen
+    Queen,
 }
 
 impl PiecePromotes {
@@ -292,13 +292,22 @@ pub fn index2board_notation(index: u8) -> String {
 pub struct Move {
     pub from: u8,
     pub to: u8,
-    pub on_promotion: PiecePromotes
+    pub on_promotion: Option<PiecePromotes>
 }
 
 impl Move {
     pub fn to_string(&self) -> String {
         let mut res = index2board_notation(self.from);
         res.push_str(index2board_notation(self.to).as_str());
+        match self.on_promotion {
+            Some(promote) => match promote {
+                PiecePromotes::Queen => res.push('q'),
+                PiecePromotes::Bishop => res.push('b'),
+                PiecePromotes::Rook => res.push('r'),
+                PiecePromotes::Knight => res.push('n')
+            }
+            None => {}
+        }
         res
     }
 }

@@ -133,7 +133,7 @@ impl Chessboard {
                         let king_ray = self.pseudo_moves.rook(king_index, blockers_without_invis).unwrap()
                              & self.pseudo_moves.direction_ray(king_index, (direction + 4) % 8);
                         // so there is a single piece between the king and a rook type piece, if it a pawn it cannot capture en passant
-                        if enemy_ray & king_ray != 0 {
+                        if enemy_ray & king_ray == set_bit(0, index as u8) {
                             legal_moves = subtract_bb(legal_moves, set_bit(0, target));
                         }
                     }
@@ -361,7 +361,7 @@ impl Chessboard {
 
         // loop over all enemy sliding pieces
         let enemy = self.pieces(&enemy_color);
-        for index in bb_to_vec(enemy.get_bb_rooks() | enemy.get_bb_queens() & *self.pseudo_moves.rook(king_index, 0).unwrap()) {
+        for index in bb_to_vec((enemy.get_bb_rooks() | enemy.get_bb_queens()) & *self.pseudo_moves.rook(king_index, 0).unwrap()) {
             let enemy_moves = *self.pseudo_moves.rook(index as usize, blockers).unwrap();
             // now for each direction we want to go from the king into the opposite direction and check the overlap
             for direction in [0, 2, 4, 6] {
@@ -371,14 +371,15 @@ impl Chessboard {
                 // store the mask for later use
                 if pinned_piece != 0 {
                     pinned |= pinned_piece;
-                    let pinned_index = get_lsb_index(pinned);
+                    let pinned_index = get_lsb_index(pinned_piece);
                     self.pinned_masks_cache[pinned_index] = self.pseudo_moves.direction_ray(pinned_index, direction) | 
                     self.pseudo_moves.direction_ray(pinned_index, (direction + 4) % 8);
+                    break;
                 }
             }
         }
         let enemy = self.pieces(&enemy_color);
-        for index in bb_to_vec(enemy.get_bb_bishops() | enemy.get_bb_queens() & *self.pseudo_moves.bishop(king_index, 0).unwrap()) {
+        for index in bb_to_vec((enemy.get_bb_bishops() | enemy.get_bb_queens()) & *self.pseudo_moves.bishop(king_index, 0).unwrap()) {
             let enemy_moves = *self.pseudo_moves.bishop(index as usize, blockers).unwrap();
             // now for each direction we want to go from the king into the opposite direction and check the overlap
             for direction in [1, 3, 5, 7] {
@@ -388,9 +389,10 @@ impl Chessboard {
                 // store the mask for later use
                 if pinned_piece != 0 {
                     pinned |= pinned_piece;
-                    let pinned_index = get_lsb_index(pinned);
+                    let pinned_index = get_lsb_index(pinned_piece);
                     self.pinned_masks_cache[pinned_index] = self.pseudo_moves.direction_ray(pinned_index, direction) | 
                     self.pseudo_moves.direction_ray(pinned_index, (direction + 4) % 8);
+                    break;
                 }
             }
         }
@@ -511,12 +513,10 @@ impl Chessboard {
         let piece_color = match self.pos.to_move {
             ToMove::White => &PieceColor::White,
             ToMove::Black => &PieceColor::Black
-        };
-        let on_promotion = new_move.on_promotion;        
+        };     
         // old_index:    the index of the piece we want to move
         // index:        index of where we want to move the piece
         // piece_color:  color of the piece we want to move
-        // on_promotion: in case we promote a pawn, to which piece do we want to promote
         
         // when possible move piece from old index to new index
 
@@ -567,6 +567,7 @@ impl Chessboard {
                 // we finally also detect promotions
                 let (rank, _) = index2rank_file(index).expect("Index is too high.");
                 if rank == 8 || rank == 1 {
+                    let on_promotion = new_move.on_promotion.expect("There was no promotion type specified.");
                     promoted = true;
                     // now set the promoted piece
                     let mut promoted_pieces = self.pieces(&friendly_color).piece_type2bb(&on_promotion.to_piece_type());
@@ -579,22 +580,22 @@ impl Chessboard {
                 // detect if a castling move has been made
                 // white kingside castling
                 let mut friendly_rooks = self.pieces(&friendly_color).get_bb_rooks();
-                if index == 62 {
+                if index == 62 && self.pos.white_kingside_castle {
                     friendly_rooks = subtract_bb(friendly_rooks, set_bit(0, 63));
                     self.pieces(&friendly_color).set_bb_rooks(set_bit(friendly_rooks, 61));
                 }
                 // white queenside castling
-                else if index == 58 {
+                else if index == 58 && self.pos.white_queenside_castle {
                     friendly_rooks = subtract_bb(friendly_rooks, set_bit(0, 56));
                     self.pieces(&friendly_color).set_bb_rooks(set_bit(friendly_rooks, 59));
                 }
                 // black kingside castling
-                if index == 6 {
+                if index == 6 && self.pos.black_kingside_castle {
                     friendly_rooks = subtract_bb(friendly_rooks, set_bit(0, 7));
                     self.pieces(&friendly_color).set_bb_rooks(set_bit(friendly_rooks, 5));
                 }
                 // black queenside castling
-                if index == 2 {
+                if index == 2 && self.pos.black_queenside_castle {
                     friendly_rooks = subtract_bb(friendly_rooks, set_bit(0, 0));
                     self.pieces(&friendly_color).set_bb_rooks(set_bit(friendly_rooks, 3));
                 }
@@ -675,15 +676,16 @@ impl Chessboard {
                         let (rank, _) = index2rank_file(to_index).unwrap();
                         // we are promoting
                         if rank == 8 || rank == 1 {
-                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Rook});
-                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Bishop});
-                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Knight});
+                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: Some(PiecePromotes::Rook)});
+                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: Some(PiecePromotes::Bishop)});
+                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: Some(PiecePromotes::Knight)});
+                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: Some(PiecePromotes::Queen)});
                         }
-                        // regardess if we promote or not we always fill the on promotion with a promotion to the queen, though
-                        // it will never be used
-                        all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Queen});
+                        else {
+                            all_moves.push(Move {from: piece_index, to: to_index, on_promotion: None});
+                        }
                     },
-                    _ => {all_moves.push(Move {from: piece_index, to: to_index, on_promotion: PiecePromotes::Queen});}
+                    _ => {all_moves.push(Move {from: piece_index, to: to_index, on_promotion: None});}
                 };
             }
         }
@@ -830,7 +832,7 @@ impl Chessboard {
                     ToMove::White => {
                         // if newly selected piece is not white we can move or capture there
                         if !((w_pieces >> index) & 1 == 1) {
-                            self.move_piece(Move { from: old_index, to: index, on_promotion: PiecePromotes::Queen });
+                            self.move_piece(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)});
                         }
                         // remove the highlight
                         self.selected = Selected::None;
@@ -845,7 +847,7 @@ impl Chessboard {
                     ToMove::Black => {
                         // if newly selected piece is not black we can move or capture there
                         if !((b_pieces >> index) & 1 == 1) {
-                            self.move_piece(Move { from: old_index, to: index, on_promotion: PiecePromotes::Queen });
+                            self.move_piece(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen) });
                         }
                         self.selected = Selected::None;
                     }
