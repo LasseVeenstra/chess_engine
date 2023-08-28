@@ -1,11 +1,17 @@
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
-from board_coordinator import *
 from enum import Enum, auto
 import numpy as np
+import RustEngine as rst
+from time import sleep
 
 BOARD_SIZE = 600
+
+# create enum for player type
+class PlayerType(Enum):
+    Player = auto()
+    Computer = auto()
 
 # cut away transparent edge of image
 def crop_transparent_pgn(img: Image) -> Image:
@@ -143,7 +149,7 @@ class GamePage(ttk.Frame):
         self.controller = controller
         
         # recieve the coordinator
-        self.coordinator = Coordinator()
+        self.coordinator = rst.Coordinator.new_human_vs_human()
         
         # create a dictionary with lists where all the canvas images will be stored
         self.image_ids = {
@@ -166,9 +172,6 @@ class GamePage(ttk.Frame):
         }
         self.boardView = BoardView.White
         self.piece_size = int(BOARD_SIZE / 8)
-
-        # keep track of playing or not
-        self.playing = False
         
         # keep track whether we have selected a square
         self.selected = None # or is an int
@@ -187,9 +190,9 @@ class GamePage(ttk.Frame):
         self.boardCanvas.grid(rowspan=1, columnspan=6, row=1, column=0, padx=15, pady=2)
         # player texts
         self.player1_text = ttk.Label(boardFrame, font=("Helvetica", 13, "normal"), text="player 1:", anchor="w")
-        self.player1_text.grid(row=0, column=0, pady=0)
+        self.player1_text.grid(row=2, column=0, pady=0)
         self.player2_text = ttk.Label(boardFrame, font=("Helvetica", 13, "normal"), text="player 2:", anchor="w")
-        self.player2_text.grid(row=2, column=0, pady=0)
+        self.player2_text.grid(row=0, column=0, pady=0)
         
         boardFrame.grid(row=1, column=0, columnspan=2)
         
@@ -225,8 +228,13 @@ class GamePage(ttk.Frame):
         # create a button for flipping the board
         self.flipButton = ttk.Button(buttonsFrame, text="flip board", command=self.flipBoard)
         self.flipButton.grid(row=3, column=0, padx=1, pady=5)
-        self.playButton = ttk.Button(buttonsFrame, text="Play!", command=self.startPlay)
-        self.playButton.grid(row=4, column=0, pady=5)
+        # create a button for next computer move
+        self.NextCompButton = ttk.Button(buttonsFrame, text="next computer move", command=self.nextComputerMove)
+        self.NextCompButton.grid(row=4, column=0, pady=5)
+        # start a computer vs computer run
+        self.NextCompButton = ttk.Button(buttonsFrame, text="run computer vs computer", command=self.computervscomputerRun)
+        self.NextCompButton.grid(row=5, column=0, pady=5)
+        
         
         buttonsFrame.grid(row=1, column=2, padx=10)
         
@@ -245,7 +253,7 @@ class GamePage(ttk.Frame):
 
         # to finish the initialization we empty the board
         self.emptyPosition()
-        self.update()
+        self.update_board()
 
     def loadImages(self):
         size = self.piece_size
@@ -287,25 +295,30 @@ class GamePage(ttk.Frame):
             match player1:
                 case PlayerType.Player:
                     self.player1_text.config(text="player 1: human")
+                    self.coordinator.set_player1("human")
                 case PlayerType.Computer:
                     self.player1_text.config(text="player 1: computer")
+                    self.coordinator.set_player1("random")
             match player2:
                 case PlayerType.Player:
                     self.player2_text.config(text="player 2: human")
+                    self.coordinator.set_player2("human")
                 case PlayerType.Computer:
                     self.player2_text.config(text="player 2: computer")
+                    self.coordinator.set_player2("random")
         
     
     def to_StartPage(self):
         self.controller.show_frame(StartPage)
     
-    def startPlay(self):
-        self.playing = not self.playing
-        if not self.playing:
-            self.playButton.configure(text="Playing...")
-            self.update()
-        else:
-            self.playButton.configure(text="Play!")
+    def nextComputerMove(self):
+        self.coordinator.next_computer_move()
+        self.update_board()
+        
+    def computervscomputerRun(self):
+        for _ in range(100):
+            self.nextComputerMove()
+            #sleep(0.5)
 
     def board2VisualBoard(self, rank: int, file: int) -> (float, float):
         return (file - 1) * self.piece_size, (8 - rank) * self. piece_size
@@ -321,7 +334,7 @@ class GamePage(ttk.Frame):
                 self.boardView = BoardView.Black
             case BoardView.Black:
                 self.boardView = BoardView.White
-        self.update()
+        self.update_board()
 
     def lift_pieces(self):
         # bring the pieces above the highlights
@@ -348,7 +361,7 @@ class GamePage(ttk.Frame):
             rank, file = index2rank_file(i)
             self.addPiece(img_str, rank, file, key)
         self.lift_pieces()
-
+    
     def send_input2coordinator(self, index: int):
         # invert the index if we are having blacks perspective
         if self.boardView == BoardView.Black:
@@ -357,7 +370,7 @@ class GamePage(ttk.Frame):
         if index < 0 or index > 63:
             return
         else:
-            self.coordinator.recieve_click(index)
+            self.coordinator.input_select(index)
     
     def on_select(self, event):
         # this function will send to the backend what square was pressed
@@ -368,7 +381,7 @@ class GamePage(ttk.Frame):
         self.selected, = self.boardCanvas.find_closest(event.x, event.y)
         self.boardCanvas.lift(self.selected)
         self.selected_index = index
-        self.update()
+        self.update_board()
     
     def on_drag(self, event):
         self.boardCanvas.itemconfig(self.selected, anchor="center")
@@ -386,7 +399,7 @@ class GamePage(ttk.Frame):
             self.boardCanvas.coords(self.selected, x, y)
             self.send_input2coordinator(index)
         
-        self.update()
+        self.update_board()
             
     def addPiece(self, piece: str, rank: int, file: int, key: str):
         x, y = self.board2VisualBoard(rank, file)
@@ -415,48 +428,50 @@ class GamePage(ttk.Frame):
             
     def resetPosition(self):
         self.coordinator.reset_position()
-        self.update()
+        self.update_board()
     
     def emptyPosition(self):
-        self.coordinator = Coordinator()
-        self.update()
+        self.coordinator.empty_position()
+        self.update_board()
     
     def undo(self):
         self.coordinator.undo()
-        self.update()
+        self.update_board()
         
     def test_positions(self):
-        self.coordinator.chessboard.test_position_depth()
-        self.update()
+        self.coordinator.test_positions()
+        self.update_board()
     
-    def update(self):
+    def update_board(self):
         # clear pieces and highlights etc
         for key in self.image_ids:
             for square in self.image_ids[key]:
                 self.boardCanvas.itemconfig(square, state="hidden", tags=("hiding"))
         # get the select square
-        for i in self.coordinator.get_select(): # only option are [] and [i], this is just a trick to use an alternative to Option<>
+        selected_square = self.coordinator.get_selected()
+        if selected_square != -1:
             # change index depending upon perspective
             if self.boardView == BoardView.Black:
-                i = 63 - i
-            legal_captures = self.coordinator.get_legal_captures(i)
-            legal_non_captures = self.coordinator.get_legal_non_captures(i)
+                selected_square = 63 - selected_square
+            legal_captures = self.coordinator.get_legal_captures(selected_square)
+            legal_non_captures = self.coordinator.get_legal_non_captures(selected_square)
             if self.boardView == BoardView.Black:
                 legal_captures = [63 - index for index in legal_captures]
                 legal_captures = [63 - index for index in legal_captures]
             # highlight the select square
-            self.highlightSquare(i)
+            self.highlightSquare(selected_square)
             # highlight legal capture and non capture moves
             self.highlightLegalMoves(legal_captures, MoveType.Capture)
             self.highlightLegalMoves(legal_non_captures, MoveType.NonCapture)
         # load the position
-        self.loadPosition(self.coordinator.board_to_string())
+        self.loadPosition(self.coordinator.to_string())
+        self.update_idletasks()
     
     def loadFEN(self):
         # now load the FEN
         FEN = self.fenEntry.get()
-        self.coordinator.loadFEN(FEN)
-        self.update()
+        self.coordinator.load_fen(FEN)
+        self.update_board()
 
 
 

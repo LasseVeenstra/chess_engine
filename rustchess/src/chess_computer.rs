@@ -4,26 +4,26 @@ use crate::chessboard_helper::*;
 use rand::seq::SliceRandom;
 
 pub trait RecieveAndReturnMove {
-    // This function should recieve a move and then return the move the computer(or human) wants to make
-    fn recieve_and_return_move(&mut self, new_move: Move) -> Move;
+    // recieves a mutable reference to the current chessboard and then returns a new move 
+    fn return_move(&mut self, chessboard: &mut Chessboard) -> Move;
 }
 
+#[pyclass]
 pub struct RandomComputer {
-    chessboard: Chessboard
 }
 
 impl RecieveAndReturnMove for RandomComputer {
-    fn recieve_and_return_move(&mut self, new_move: Move) -> Move {
-        self.chessboard.move_piece(new_move);
+    fn return_move(&mut self, chessboard: &mut Chessboard) -> Move {
         // now we get all legal moves
-        let moves = self.chessboard.all_moves();
+        let moves = chessboard.all_moves();
         // choose a random move
         *moves.choose(&mut rand::thread_rng()).expect("No moves available.")
     }
 }
-
+#[pymethods]
 impl RandomComputer {
+    #[new]
     pub fn new() -> RandomComputer {
-        RandomComputer { chessboard: Chessboard::new_start() }
+        RandomComputer {}
     }
 }

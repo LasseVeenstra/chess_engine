@@ -7,7 +7,7 @@ class PlayerType(Enum):
     Computer = auto()
 
 class Coordinator():
-    def __init__(self, player1=PlayerType.Player, player2=PlayerType.Player) -> None:
+    def __init__(self) -> None:
         self.chessboard = rst.HumanChessboardInteraction()
         self.player1 = player1
         self.player2 = player2

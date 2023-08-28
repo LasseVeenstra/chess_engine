@@ -202,6 +202,8 @@ pub enum PieceColor {
     Black,
     None
 }
+#[derive(Debug, Clone, Copy)]
+pub struct NoLegalMoveInputError;
 
 #[derive(Debug, Clone, Copy)]
 pub enum PiecePromotes {

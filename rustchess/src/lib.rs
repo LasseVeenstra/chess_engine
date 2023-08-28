@@ -19,7 +19,7 @@ fn RustEngine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_lookup, m)?)?;
     m.add_class::<chessboard::Chessboard>()?;
     m.add_class::<chess_computer::RandomComputer>()?;
-    m.add_class::<chessboard::HumanChessboardInteraction>()?;
+    m.add_class::<chessboard_coordinator::Coordinator>()?;
     
     Ok(())
 }

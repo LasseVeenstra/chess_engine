@@ -487,7 +487,7 @@ impl Chessboard {
         }
     }
 
-    pub fn move_piece(&mut self, new_move: Move) {
+    pub fn move_piece(&mut self, new_move: Move) -> Result<(), NoLegalMoveInputError> {
         // make a clone of the current position that we add in the end in case the move was legally made
         let cloned = self.pos.clone();
 
@@ -506,13 +506,13 @@ impl Chessboard {
 
         // return if the move is not legal
         if !self.check_move_for_legal(old_index, index, piece_color) {
-            return
+            return Err(NoLegalMoveInputError)
         }
 
         let (friendly_color, enemy_color) = match self.pos.detect_piece_color(old_index) {
             PieceColor::White => (PieceColor::White, PieceColor::Black),
             PieceColor::Black => (PieceColor::Black, PieceColor::White),
-            PieceColor::None => {return}
+            PieceColor::None => {return Err(NoLegalMoveInputError)}
         };
 
         // get the piece type of the piece we want to move and the piece type
@@ -535,7 +535,7 @@ impl Chessboard {
                             match enemy_color {
                                 PieceColor::White => bb_captured_piece = subtract_bb(bb_captured_piece, set_bit(0, index - 8)),
                                 PieceColor::Black => bb_captured_piece = subtract_bb(bb_captured_piece, set_bit(0, index + 8)),
-                                _ => return
+                                _ => return Err(NoLegalMoveInputError)
                             };
                         }
                     }
@@ -636,9 +636,9 @@ impl Chessboard {
         };
         self.clear_cache();
         self.history.push(cloned);
-
-        
+        Ok(())
     }
+
     pub fn all_moves(&mut self) -> Vec<Move> {
         // this function returns all the legal moves the current player can make in the position
         let mut all_moves: Vec<Move> = Vec::new();
@@ -675,6 +675,10 @@ impl Chessboard {
         }
         // return the final moves
         all_moves
+    }
+
+    pub fn get_to_move(&self) -> &ToMove {
+        &self.pos.to_move
     }
 }
 
@@ -738,7 +742,7 @@ impl Chessboard {
         let mut num_positions = 0;
         // now loop over all moves
         for current_move in moves {
-            self.move_piece(current_move);
+            self.move_piece(current_move).unwrap();
             num_positions += self.legal_positions_on_depth(depth - 1);
             self.undo();
         }
@@ -754,7 +758,7 @@ impl Chessboard {
     pub fn debug_depth(&mut self, depth: u8) {
         let moves = self.all_moves();
         for current_move in moves {
-            self.move_piece(current_move);
+            self.move_piece(current_move).unwrap();
             println!("{}: {}", current_move.to_string(), self.legal_positions_on_depth(depth - 1));
             self.undo();
         }
@@ -933,6 +937,58 @@ impl Chessboard {
         self.clear_cache();
     }
 
+    pub fn get_legal_captures(&mut self, index: u8) -> Vec<u8> {
+        // index must be the index of the piece of which we want to get legal captures
+        let piece_color = self.pos.detect_piece_color(index);
+        // return early if we have selected an empty square
+        match piece_color {
+            PieceColor::None => return vec![],
+            _ => {}
+        }
+        let legal_moves = self.get_legal_moves(index);
+        // get enemy pieces
+        let enemy_pieces = match piece_color {
+            PieceColor::White => self.pos.black_pieces.get_all(),
+            PieceColor::Black => self.pos.white_pieces.get_all(),
+            _ => 0
+        };
+        // add en-passant possibly
+        let legal_captures = match self.pos.es_target {
+            Some(target) => legal_moves & set_bit(enemy_pieces, target),
+            None => legal_moves & enemy_pieces
+        };
+        bb_to_vec(legal_captures)
+    }
+
+    pub fn get_legal_non_captures(&mut self, index: u8) -> Vec<u8> {
+        // index must be the index of the piece of which we want to get legal captures
+        let piece_color = self.pos.detect_piece_color(index);
+        // return early if we have selected an empty square
+        match piece_color {
+            PieceColor::None => return vec![],
+            _ => {}
+        }
+        let legal_moves = self.get_legal_moves(index);
+        // get enemy pieces
+        let enemy_pieces = match piece_color {
+            PieceColor::White => self.pos.black_pieces.get_all(),
+            PieceColor::Black => self.pos.white_pieces.get_all(),
+            _ => 0
+        };
+        let legal_non_captures = match self.pos.es_target {
+            Some(target) => subtract_bb(legal_moves, set_bit(enemy_pieces, target)),
+            None => subtract_bb(legal_moves, enemy_pieces)
+        };
+        bb_to_vec(legal_non_captures)
+    }
+
+    pub fn get_white_pieces(&mut self) -> u64 {
+        self.pos.white_pieces.get_all()
+    }
+    pub fn get_black_pieces(&mut self) -> u64 {
+        self.pos.black_pieces.get_all()
+    }
+
 }
 
 
@@ -1058,7 +1114,10 @@ impl HumanChessboardInteraction {
                     ToMove::White => {
                         // if newly selected piece is not white we can move or capture there
                         if !((w_pieces >> index) & 1 == 1) {
-                            self.chessboard.move_piece(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)});
+                            match self.chessboard.move_piece(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)}) {
+                                Ok(_) => {},
+                                Err(_) => {}
+                            };
                         }
                         // remove the highlight
                         self.selected = Selected::None;
@@ -1073,7 +1132,10 @@ impl HumanChessboardInteraction {
                     ToMove::Black => {
                         // if newly selected piece is not black we can move or capture there
                         if !((b_pieces >> index) & 1 == 1) {
-                            self.chessboard.move_piece(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen) });
+                            match self.chessboard.move_piece(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)}) {
+                                Ok(_) => {},
+                                Err(_) => {}
+                            };
                         }
                         self.selected = Selected::None;
                     }
