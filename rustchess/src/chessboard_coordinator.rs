@@ -100,6 +100,10 @@ impl Coordinator {
 
 #[pymethods]
 impl Coordinator {
+    #[new]
+    pub fn new() -> Coordinator {
+        Coordinator { computer1: None, computer2: None, chessboard: Chessboard::new_start(), selected: Selected::None}
+    }
     #[staticmethod]
     pub fn new_human_vs_human() -> Coordinator {
         Coordinator { computer1: None, computer2: None, chessboard: Chessboard::new_start(), selected: Selected::None}
