@@ -44,36 +44,61 @@ def rank_file2index(rank: int, file: int) -> int:
 class ChessboardSquareLabel(tk.Label):
     # parent must be the ChessboardFrame
     def __init__(self, parent, image):
-        tk.Frame.__init__(self, parent, image=image)
+        tk.Label.__init__(self, parent, image=image)
+        parent.bind_events(self)
         
-class ChessboardFrame(tk.Frame):
-    def __init__(self, parent, controller):
-        tk.Frame.__init__(self, parent, width=BOARD_SIZE, height=BOARD_SIZE, bg="white")
-        self.controller = controller
+        
+class ChessboardCanvas(tk.Canvas):
+    def __init__(self, parent):
+        tk.Canvas.__init__(self, 
+                           parent, 
+                           bg="black", 
+                           width=BOARD_SIZE, 
+                           height=BOARD_SIZE,
+                           bd=0,
+                           highlightthickness=0,
+                           relief="ridge"
+                           )
         self.parent = parent
-        
         # in the background we have a rust based chessboard
         # for all calculations and computers
         self.chessboard_coordinator = rst.Coordinator()
         
         self.board_view = BoardView.White
         self.piece_size = int(BOARD_SIZE / 8)
-        # keep track whether we have selected a square
-        self.selected = None # or is an int when selected
+        self.previous_position = "                                                                " # 64 spaces
+        self.pieces_ids = [0 for _ in range(64)] # all image ids of pieces(so not of captures)
         
         # create a dictionary for the piece images
         self.piece_images = {}
         self.load_piece_images()
         
+        # create a dictionary with lists where all the canvas images will be stored
+        self.image_ids = {
+            "p": [],
+            "r": [],
+            "n": [],
+            "b": [],
+            "k": [],
+            "q": [],
+            "P": [],
+            "R": [],
+            "N": [],
+            "B": [],
+            "K": [],
+            "Q": [],
+            " ": [],
+            "highlights": [],
+            "legalmoves": [],
+            "capturemoves": []
+        }
         # load the chessboard on screen
         img = Image.open("pythonchess/images/EmptyChessBoard.png")
         img = crop_transparent_pgn(img).resize((BOARD_SIZE, BOARD_SIZE))
         self.chessboard_background = ImageTk.PhotoImage(img)
-        self.background_label = tk.Label(self, image=self.chessboard_background)
-        self.background_label.grid(row=0, column=0, rowspan=8, columnspan=8)
+        self.background_tag = self.create_image(0, 0, image=self.chessboard_background, anchor="nw")
         
-        # bind mouse events
-        self.bind_events(self.background_label)
+        self.update_board()
         
     def load_piece_images(self):
         size = self.piece_size
@@ -102,41 +127,128 @@ class ChessboardFrame(tk.Frame):
             "pythonchess/images/WhiteKing.png").resize((size, size)))
         self.piece_images['Q'] = ImageTk.PhotoImage(Image.open(
             "pythonchess/images/WhiteQueen.png").resize((size, size)))
-        self.piece_images[' '] = ImageTk.PhotoImage(Image.open(
-            "pythonchess/images/EmptySquare.png").resize((size, size)))
         self.piece_images["selected"] = ImageTk.PhotoImage(
             Image.open("pythonchess/images/SelectedSquare.png").resize((size, size)))
         self.piece_images["legal"] = ImageTk.PhotoImage(
             Image.open("pythonchess/images/LegalMove.png").resize((size, size)))
         self.piece_images["capture"] = ImageTk.PhotoImage(
             Image.open("pythonchess/images/Capture.png").resize((size, size)))
-    
-    def initialize_squares(self):
-        for i in range(8):
-            for j in range(8):
-                new_square = 
-    
-    def bind_events(self, widget):
-        widget.bind("<ButtonPress-1>", self.on_select)
-        widget.bind("<B1-Motion>", self.on_drag)
-        widget.bind("<ButtonRelease-1>", self.on_drop)
         
-    # when we click on the board
-    def on_select(self, event):
-        print("XXX")
-
-    # when we drag over the board
-    def on_drag(self, event):
-        print(event.x, event.y)
+    def board2visual_board(self, rank: int, file: int) -> (float, float):
+        return (file - 1) * self.piece_size, (8 - rank) * self.piece_size
     
-    # when we release again on the board
-    def on_drop(self, event):
-        pass        
+    def visual_board2board(self, x: float, y: float) -> (int, int):
+        file = int(x / self.piece_size) + 1
+        rank = 8 - int(y / self.piece_size)
+        return rank, file
+    
+    def flip_board(self):
+        match self.board_view:
+            case BoardView.White:
+                self.board_view = BoardView.Black
+            case BoardView.Black:
+                self.board_view = BoardView.White
+        self.update_board()
+
+    def lift_pieces(self):
+        # bring the pieces above the highlights
+        piece_keys = ["p", "r", "b", "n", "k", "q", "P", "R", "B", "N", "K", "Q"]
+        for piece in [self.image_ids.get(key) for key in piece_keys]:
+            self.lift(piece)
+
+    def load_position(self, position: str):
+        if self.board_view == BoardView.Black:
+            # reverse the string
+            position = position[::-1]
+        
+        # first we hide only those images that have to be changed
+        for index, (piece, old_piece) in enumerate(zip(position, self.previous_position)):
+            if piece != old_piece:
+                id = self.pieces_ids[index]
+                self.itemconfig(id, state="hidden", tags=("hiding"))
+                
+        # input is a string of lenght 64
+        for index, (piece, old_piece) in enumerate(zip(position, self.previous_position)):
+            if piece != old_piece:
+                self.add_piece(piece, index, piece)
+
+    def add_piece(self, piece: str, index: int, key: str):
+        if piece == " ":
+            return
+        rank, file = index2rank_file(index)
+        x, y = self.board2visual_board(rank, file)
+        # get al hidden pieces
+        hidden_pieces = self.find_withtag("hiding")
+        # get available pieces of correct type
+        available_pieces = list(set(hidden_pieces) & set(self.image_ids[key]))
+        # no available pieces
+        if len(available_pieces) == 0:
+            new_piece = self.create_image(x, y, image=self.piece_images[piece], anchor="nw")
+            self.image_ids[key].append(new_piece)
+        else:
+            new_piece = available_pieces[0]
+            self.coords(new_piece, x, y)
+            self.dtag(new_piece, "hiding")
+            self.itemconfig(new_piece, state="normal")
+            
+        # only store real pieces on this list
+        if key not in ["highlights", "legalmoves", "capturemoves"]:
+            self.pieces_ids[index] = new_piece
+    
+    def send_input2coordinator(self, index: int):
+        # invert the index if we are having blacks perspective
+        if self.board_view == BoardView.Black:
+            index = 63 - index
+        # check if the rank and file are valid (not choosing outside the board)
+        if index < 0 or index > 63:
+            return
+        else:
+            self.chessboard_coordinator.input_select(index)
+
+    def reset_position(self):
+        self.chessboard_coordinator.reset_position()
+        self.update_board()
+    
+    def empty_position(self):
+        self.chessboard_coordinator.empty_position()
+        self.update_board()
+    
+    def undo(self):
+        self.chessboard_coordinator.undo()
+        self.update_board()
+        
+    def load_fen(self, fen: str):
+        self.chessboard_coordinator.load_fen(fen)
+        self.update_board()
+    
+    def update_board(self):
+        # clear all highlights of the board
+        for square in self.image_ids["legalmoves"] + self.image_ids["capturemoves"] + self.image_ids["highlights"]:
+            self.itemconfig(square, state="hidden", tags=("hiding"))
+        # get the select square
+        selected_square = self.chessboard_coordinator.get_selected()
+        if selected_square != -1:
+            # change index depending upon perspective
+            if self.board_view == BoardView.Black:
+                selected_square = 63 - selected_square
+            legal_captures = self.chessboard_coordinator.get_legal_captures(selected_square)
+            legal_non_captures = self.chessboard_coordinator.get_legal_non_captures(selected_square)
+            if self.board_view == BoardView.Black:
+                legal_captures = [63 - index for index in legal_captures]
+                legal_captures = [63 - index for index in legal_captures]
+            # highlight the select square
+            self.highlightSquare(selected_square)
+            # highlight legal capture and non capture moves
+            self.highlightLegalMoves(legal_captures, MoveType.Capture)
+            self.highlightLegalMoves(legal_non_captures, MoveType.NonCapture)
+        # load the position
+        self.load_position(self.chessboard_coordinator.to_string())
+        self.update_idletasks()
 
 def main():
     window = tk.Tk()
     window.geometry("800x800")
-    chessboard = ChessboardFrame(window, None)
+    chessboard = ChessboardCanvas(window)
     chessboard.pack()
     # The main loop for the application
     window.mainloop()

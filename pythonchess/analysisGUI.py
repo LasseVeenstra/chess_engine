@@ -5,6 +5,82 @@ from enum import Enum, auto
 import numpy as np
 import RustEngine as rst
 from startscreenGUI import BOARD_SIZE, BoardView, crop_transparent_pgn
+from board_frame import *
+
+
+class ChessboardForAnalysis(ChessboardCanvas):
+    def __init__(self, parent):
+        super().__init__(parent)
+        
+        # keep track whether we have selected a square
+        self.selected = None # or is an int when selected
+        self.selected_index = None
+        
+        # bind mouse events
+        self.bind_events()
+    
+    def bind_events(self):
+        self.bind("<ButtonPress-1>", self.on_select)
+        self.bind("<B1-Motion>", self.on_drag)
+        self.bind("<ButtonRelease-1>", self.on_drop)
+        
+    # when we click on the board
+    def on_select(self, event):
+        # this function will send to the backend what square was pressed
+        rank, file = self.visual_board2board(event.x, event.y)
+        index = rank_file2index(rank, file)
+        self.send_input2coordinator(index)
+        # update the piece that is selected
+        self.selected, = self.find_closest(event.x, event.y)
+        # stop if we try to select the background
+        if self.selected == self.background_tag:
+            self.selected = None
+            return
+        self.lift(self.selected)
+        self.selected_index = index
+        self.update_board()
+
+    # when we drag over the board
+    def on_drag(self, event):
+        if self.selected is None:
+            return
+        self.itemconfig(self.selected, anchor="center")
+        self.coords(self.selected, event.x, event.y)
+    
+    # when we release again on the board
+    def on_drop(self, event):
+        if self.selected is None:
+            return
+        self.itemconfig(self.selected, anchor="nw")
+        rank ,file = self.visual_board2board(event.x, event.y)
+        x, y = self.board2visual_board(rank, file)
+        index = rank_file2index(rank, file)
+        # only if we moved the piece do we want to try to move it
+        if index != self.selected_index:
+            self.coords(self.selected, x, y)
+            self.send_input2coordinator(index)
+        self.update_board()
+  
+    def highlightSquare(self, index: int):
+        # now we want to highlight this square by adding a highlight piece
+        rank, file = index2rank_file(index)
+        self.add_piece("selected", rank, file, "highlights")
+
+    def highlightLegalMoves(self, indices: list[int], move_type: MoveType):
+        # The indices must be a list with integers denoting the indices of the squares to highlight
+        match move_type:
+            case MoveType.NonCapture:
+                key = "legalmoves"
+                img_str = "legal"
+            case MoveType.Capture:
+                key = "capturemoves"
+                img_str = "capture"
+        
+        for i in indices:
+            rank, file = index2rank_file(i)
+            self.add_piece(img_str, rank, file, key)
+        self.lift_pieces()
+
 
 class AnalysisPage(ttk.Frame):
     def __init__(self, parent, controller):
@@ -118,23 +194,6 @@ class AnalysisPage(ttk.Frame):
         self.emptyPosition()
         self.update_board()
     
-    def recieve_playertypes(self, player1: PlayerType, player2: PlayerType):
-            match player1:
-                case PlayerType.Player:
-                    self.player1_text.config(text="player 1: human")
-                    self.coordinator.set_player1("human")
-                case PlayerType.Computer:
-                    self.player1_text.config(text="player 1: computer")
-                    self.coordinator.set_player1("random")
-            match player2:
-                case PlayerType.Player:
-                    self.player2_text.config(text="player 2: human")
-                    self.coordinator.set_player2("human")
-                case PlayerType.Computer:
-                    self.player2_text.config(text="player 2: computer")
-                    self.coordinator.set_player2("random")
-        
-    
     def to_StartPage(self):
         self.controller.show_frame(StartPage)
     
@@ -146,156 +205,3 @@ class AnalysisPage(ttk.Frame):
         for _ in range(100):
             self.nextComputerMove()
             #sleep(0.5)
-
-    def board2VisualBoard(self, rank: int, file: int) -> (float, float):
-        return (file - 1) * self.piece_size, (8 - rank) * self. piece_size
-
-    def visualBoard2Board(self, x: float, y: float) -> (int, int):
-        file = int(x / self.piece_size) + 1
-        rank = 8 - int(y / self.piece_size)
-        return rank, file
-
-    def flipBoard(self):
-        match self.boardView:
-            case BoardView.White:
-                self.boardView = BoardView.Black
-            case BoardView.Black:
-                self.boardView = BoardView.White
-        self.update_board()
-
-    def lift_pieces(self):
-        # bring the pieces above the highlights
-        piece_keys = ["p", "r", "b", "n", "k", "q", "P", "R", "B", "N", "K", "Q"]
-        for piece in [self.image_ids.get(key) for key in piece_keys]:
-            self.boardCanvas.lift(piece)
-    
-    def highlightSquare(self, index: int):
-        # now we want to highlight this square by adding a highlight piece
-        rank, file = index2rank_file(index)
-        self.addPiece("SelectedSquare", rank, file, "highlights")
-
-    def highlightLegalMoves(self, indices: list[int], move_type: MoveType):
-        # The indices must be a list with integers denoting the indices of the squares to highlight
-        match move_type:
-            case MoveType.NonCapture:
-                key = "legalmoves"
-                img_str = "LegalMove"
-            case MoveType.Capture:
-                key = "capturemoves"
-                img_str = "CaptureMove"
-        
-        for i in indices:
-            rank, file = index2rank_file(i)
-            self.addPiece(img_str, rank, file, key)
-        self.lift_pieces()
-    
-    def send_input2coordinator(self, index: int):
-        # invert the index if we are having blacks perspective
-        if self.boardView == BoardView.Black:
-            index = 63 - index
-        # check if the rank and file are valid (not choosing outside the board)
-        if index < 0 or index > 63:
-            return
-        else:
-            self.coordinator.input_select(index)
-    
-    def on_select(self, event):
-        # this function will send to the backend what square was pressed
-        rank, file = self.visualBoard2Board(event.x, event.y)
-        index = rank_file2index(rank, file)
-        self.send_input2coordinator(index)
-        # update the piece that is selected
-        self.selected, = self.boardCanvas.find_closest(event.x, event.y)
-        self.boardCanvas.lift(self.selected)
-        self.selected_index = index
-        self.update_board()
-    
-    def on_drag(self, event):
-        self.boardCanvas.itemconfig(self.selected, anchor="center")
-        self.boardCanvas.coords(self.selected, event.x, event.y)
-    
-    def on_drop(self, event):
-        if self.selected is None:
-            return
-        self.boardCanvas.itemconfig(self.selected, anchor="nw")
-        rank ,file = self.visualBoard2Board(event.x, event.y)
-        x, y = self.board2VisualBoard(rank, file)
-        index = rank_file2index(rank, file)
-        # only if we moved the piece do we want to try to move it
-        if index != self.selected_index:
-            self.boardCanvas.coords(self.selected, x, y)
-            self.send_input2coordinator(index)
-        
-        self.update_board()
-            
-    def addPiece(self, piece: str, rank: int, file: int, key: str):
-        x, y = self.board2VisualBoard(rank, file)
-        # get al hidden pieces
-        hidden_pieces = self.boardCanvas.find_withtag("hiding")
-        # get available pieces of correct type
-        available_pieces = list(set(hidden_pieces) & set(self.image_ids[key]))
-        # no available pieces
-        if len(available_pieces) == 0:
-            new_piece = self.boardCanvas.create_image(x, y, image=self.pieceImages[piece], anchor="nw")
-            self.image_ids[key].append(new_piece)
-        else:
-            new_piece = available_pieces[0]
-            self.boardCanvas.coords(new_piece, x, y)
-            self.boardCanvas.dtag(new_piece, "hiding")
-            self.boardCanvas.itemconfig(new_piece, state="normal")
-
-    def loadPosition(self, position: str):
-        if self.boardView == BoardView.Black:
-            # reverse the string
-            position = position[::-1]
-        # input is a string of lenght 64
-        for index, piece in enumerate(position):
-            rank, file = index2rank_file(index)
-            self.addPiece(piece, rank, file, piece)
-            
-    def resetPosition(self):
-        self.coordinator.reset_position()
-        self.update_board()
-    
-    def emptyPosition(self):
-        self.coordinator.empty_position()
-        self.update_board()
-    
-    def undo(self):
-        self.coordinator.undo()
-        self.update_board()
-        
-    def test_positions(self):
-        self.coordinator.test_positions()
-        self.update_board()
-    
-    def update_board(self):
-        # clear pieces and highlights etc
-        for key in self.image_ids:
-            for square in self.image_ids[key]:
-                self.boardCanvas.itemconfig(square, state="hidden", tags=("hiding"))
-        # get the select square
-        selected_square = self.coordinator.get_selected()
-        if selected_square != -1:
-            # change index depending upon perspective
-            if self.boardView == BoardView.Black:
-                selected_square = 63 - selected_square
-            legal_captures = self.coordinator.get_legal_captures(selected_square)
-            legal_non_captures = self.coordinator.get_legal_non_captures(selected_square)
-            if self.boardView == BoardView.Black:
-                legal_captures = [63 - index for index in legal_captures]
-                legal_captures = [63 - index for index in legal_captures]
-            # highlight the select square
-            self.highlightSquare(selected_square)
-            # highlight legal capture and non capture moves
-            self.highlightLegalMoves(legal_captures, MoveType.Capture)
-            self.highlightLegalMoves(legal_non_captures, MoveType.NonCapture)
-        # load the position
-        self.loadPosition(self.coordinator.to_string())
-        self.update_idletasks()
-    
-    def loadFEN(self):
-        # now load the FEN
-        FEN = self.fenEntry.get()
-        self.coordinator.load_fen(FEN)
-        self.update_board()
