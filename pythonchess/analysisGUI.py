@@ -90,6 +90,10 @@ class ChessboardForAnalysis(board_frame.ChessboardCanvas):
         for i in indices:
             self.add_piece(img_str, i, key)
         self.lift_pieces()
+    
+    def test_move_calculation(self):
+        self.chessboard_coordinator.test_positions()
+        self.update_board()
 
 
 class AnalysisPage(ttk.Frame):
@@ -98,8 +102,10 @@ class AnalysisPage(ttk.Frame):
         self.controller = controller
         
         self.chessboard = ChessboardForAnalysis(self)
-        self.chessboard.grid(row=0, column=0)
+        self.chessboard.grid(row=0, column=0, padx=10, pady=10)
         
+        self.create_buttons()
+        self.buttons_frame.grid(row=0, column=1)
         
         # # recieve the coordinator
         # self.coordinator = rst.Coordinator.new_human_vs_human()
@@ -210,3 +216,11 @@ class AnalysisPage(ttk.Frame):
     
     # def to_StartPage(self):
     #     self.controller.show_frame(StartPage)
+    
+    def create_buttons(self):
+        self.buttons_frame = ttk.Frame(self)
+        ttk.Button(self.buttons_frame, text="reset", command=self.chessboard.reset_position).grid(row=0, column=0)
+        ttk.Button(self.buttons_frame, text="undo", command=self.chessboard.undo).grid(row=1, column=0)
+        ttk.Button(self.buttons_frame, text="test depth", command=self.chessboard.test_move_calculation).grid(row=2, column=0)
+        
+        

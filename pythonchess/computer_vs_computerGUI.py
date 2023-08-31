@@ -38,6 +38,8 @@ class ComputerVSComputerPage(ttk.Frame):
         # undo button
         ttk.Button(self.buttons_frame, text="undo", command=self.chessboard.undo).grid(row=1, column=0)
         ttk.Button(self.buttons_frame, text="move", command=self.chessboard.next_move).grid(row=2, column=0)
+        # reset button
+        ttk.Button(self.buttons_frame, text="reset", command=self.chessboard.reset_position).grid(row=3, column=0)
 
     
     def playing_thread(self):
