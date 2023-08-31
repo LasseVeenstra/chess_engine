@@ -24,7 +24,7 @@ class ComputerVSComputerPage(ttk.Frame):
         
         # main chessboard
         self.chessboard = Chessboard_for_AIvsAI(self)
-        self.chessboard.grid(row=0, column=0)
+        self.chessboard.grid(row=0, column=0, padx=10, pady=10)
         
         # make all the buttons
         self.make_buttons()
@@ -35,6 +35,10 @@ class ComputerVSComputerPage(ttk.Frame):
         self.buttons_frame = ttk.Frame(self)
         self.start_stop_button = ttk.Button(self.buttons_frame, text="start", command=self.start_stop_play)
         self.start_stop_button.grid(row=0, column=0)
+        # undo button
+        ttk.Button(self.buttons_frame, text="undo", command=self.chessboard.undo).grid(row=1, column=0)
+        ttk.Button(self.buttons_frame, text="move", command=self.chessboard.next_move).grid(row=2, column=0)
+
     
     def playing_thread(self):
         while True:
@@ -42,7 +46,7 @@ class ComputerVSComputerPage(ttk.Frame):
                 break
             self.chessboard.next_move()
             self.update_idletasks()
-            sleep(0.1)
+            # sleep(0.01)
     
     def start_stop_play(self):
         if self.start_stop_button["text"] == "start":

@@ -15,7 +15,7 @@ pub struct Chessboard {
     pinned_pieces_cache: Option<u64>,
     checking_pieces_cache: Option<u64>,
     defended_cache: Option<u64>,
-    pinned_masks_cache: [u64; 64] 
+    pinned_masks_cache: [u64; 64]
 }
 
 impl Chessboard {
@@ -634,6 +634,21 @@ impl Chessboard {
             ToMove::White => ToMove::Black,
             _ => ToMove::White
         };
+        // update halfmove clock
+        match moving_piece_type {
+            PieceType::Pawn => self.pos.halfmove_clock = 0,
+            _ => {
+                match captured_piece_type {
+                    PieceType::EmptySquare => self.pos.halfmove_clock += 1,
+                    _ => self.pos.halfmove_clock = 0
+                }
+            }
+        }
+        // update fullmove counter
+        match self.pos.to_move {
+            ToMove::White => self.pos.fullmove_clock += 1,
+            _ => {}
+        }
         self.clear_cache();
         self.history.push(cloned);
         Ok(())

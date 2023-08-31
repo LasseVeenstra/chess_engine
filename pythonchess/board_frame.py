@@ -160,17 +160,18 @@ class ChessboardCanvas(tk.Canvas):
         if self.board_view == BoardView.Black:
             # reverse the string
             position = position[::-1]
-        
         # first we hide only those images that have to be changed
         for index, (piece, old_piece) in enumerate(zip(position, self.previous_position)):
             if piece != old_piece:
                 id = self.pieces_ids[index]
                 self.itemconfig(id, state="hidden", tags=("hiding"))
-                
+                self.pieces_ids[index] = 0
         # input is a string of lenght 64
         for index, (piece, old_piece) in enumerate(zip(position, self.previous_position)):
             if piece != old_piece:
                 self.add_piece(piece, index, piece)
+        
+        self.previous_position = position
 
     def add_piece(self, piece: str, index: int, key: str):
         if piece == " ":
@@ -195,16 +196,6 @@ class ChessboardCanvas(tk.Canvas):
         if key not in ["highlights", "legalmoves", "capturemoves"]:
             self.pieces_ids[index] = new_piece
     
-    def send_input2coordinator(self, index: int):
-        # invert the index if we are having blacks perspective
-        if self.board_view == BoardView.Black:
-            index = 63 - index
-        # check if the rank and file are valid (not choosing outside the board)
-        if index < 0 or index > 63:
-            return
-        else:
-            self.chessboard_coordinator.input_select(index)
-
     def reset_position(self):
         self.chessboard_coordinator.reset_position()
         self.update_board()

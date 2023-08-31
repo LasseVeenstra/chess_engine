@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from time import sleep
 from computer_vs_computerGUI import ComputerVSComputerPage
+from analysisGUI import AnalysisPage
 
 class Visual(tk.Tk):
     def __init__(self, *args, **kwargs):
@@ -23,9 +24,13 @@ class Visual(tk.Tk):
 
         frame.grid(row=0, column=0, sticky="nsew")
         
-        gameframe = ComputerVSComputerPage(container, self)
-        self.frames[ComputerVSComputerPage] = gameframe
-        gameframe.grid(row=0, column=0, sticky="nsew")
+        compvcompframe = ComputerVSComputerPage(container, self)
+        self.frames[ComputerVSComputerPage] = compvcompframe
+        compvcompframe.grid(row=0, column=0, sticky="nsew")
+        
+        analysisframe = AnalysisPage(container, self)
+        self.frames[AnalysisPage] = analysisframe
+        analysisframe.grid(row=0, column=0, sticky="nsew")
         
         # show the startpage
         self.show_frame(StartPage)
@@ -48,31 +53,13 @@ class StartPage(ttk.Frame):
         self.make_AIvsAI_frame()
         self.AIvsAI.grid(row=1, column=0)
         
-        # choose_player = ttk.Label(self, text="Choose types of player by clicking the buttons.")
-        # choose_player.grid(row=1, column=0, pady=15, padx=10, columnspan=3)
+        ttk.Button(self, text="analysis board", command=lambda: self.controller.show_frame(AnalysisPage)).grid(row=2, column=0)
         
-        # choose_player1 = ttk.Label(self, text="player 1:")
-        # choose_player1.grid(row=2, column=0, pady=1)
-        
-        # choose_player2 = ttk.Label(self, text="player 2:")
-        # choose_player2.grid(row=2, column=2, pady=1)
-        
-        # create a button to start go to ComputerVSComputerPage
-        # self.startGame = tk.Button(self, text="Start play!", command=self.to_ComputerVSComputerPage,
-        #                            width=40, height=2, font=("Lucida", 12, "normal"),
-        #                             bg="white")
-        # self.startGame.grid(row=4, column=0, pady=80, columnspan=3)
-    
     def make_AIvsAI_frame(self):
         self.AIvsAI = ttk.Frame(self)
         ttk.Label(self.AIvsAI, text="watch computers fight computers!").grid(row=0, column=0)
         ttk.Button(self.AIvsAI, text="GO!", command=lambda: self.controller.show_frame(ComputerVSComputerPage)).grid(row=0, column=1)
     
-    def to_ComputerVSComputerPage(self):
-        self.controller.show_frame(ComputerVSComputerPage)
-
-
-
 if __name__ == '__main__':
     test = Visual()
     # The main loop for the application
