@@ -375,6 +375,7 @@ pub struct Pieces {
     bb_bishops: u64,
     bb_queens: u64,
     bb_king: u64,
+    king_index: Option<usize>,
     all: Option<u64>, // all pieces in one bitboard, the option allows us to cache results,
     color: PieceColor
 }
@@ -388,6 +389,7 @@ impl Pieces {
             bb_bishops: 0, 
             bb_queens: 0, 
             bb_king: 0,
+            king_index: None,
             all: None,
             color: piece_color}
     }
@@ -399,6 +401,7 @@ impl Pieces {
             bb_bishops: WHITE_BISHOP_STARTING_BB, 
             bb_queens: WHITE_QUEEN_STARTING_BB, 
             bb_king: WHITE_KING_STARTING_BB,
+            king_index: Some(60),
             all: None,
             color: PieceColor::White};
         pieces.get_all();
@@ -412,6 +415,7 @@ impl Pieces {
             bb_bishops: BLACK_BISHOP_STARTING_BB, 
             bb_queens: BLACK_QUEEN_STARTING_BB, 
             bb_king: BLACK_KING_STARTING_BB,
+            king_index: Some(4),
             all: None,
         color: PieceColor::Black};
         pieces.get_all();
@@ -452,6 +456,16 @@ impl Pieces {
     pub fn get_bb_king(&self) -> u64 {
         self.bb_king
     }
+    pub fn get_king_index(&mut self) -> usize {
+        match self.king_index {
+            Some(i) => i,
+            None => {
+                let i = (self.bb_king as f64).log2() as usize;
+                self.king_index = Some(i);
+                i
+            }
+        }
+    }
     // set all the pieces bitboards
     pub fn set_bb_pawns(&mut self, new_bb: u64){
         self.bb_pawns = new_bb;
@@ -476,6 +490,7 @@ impl Pieces {
     pub fn set_bb_king(&mut self, new_bb: u64){
         self.bb_king = new_bb;
         self.all = None;
+        self.king_index = None;
     }
     pub fn detect_piece_type(&self, piece_index: u8) -> PieceType {
         // Detects the piece type of the current piece location. Piece index must

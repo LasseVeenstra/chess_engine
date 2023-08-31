@@ -7,7 +7,6 @@ use crate::chessboard_helper::*;
 pub struct Chessboard {
     pos: Position,
     history: Vec<Position>,
-    selected: Selected,
     pseudo_moves: LoadMoves,
     // every time we make a move this will need to be cleared
     legal_moves_cache: [Option<u64>; 64],
@@ -98,7 +97,7 @@ impl Chessboard {
             None => {},
             Some(target) => {
                 let blockers = self.pos.get_all();
-                let king_index = get_lsb_index(self.pieces(&friendly_color).get_bb_king());
+                let king_index = self.pieces(&friendly_color).get_king_index();
                 let invisable_pawn = match enemy_color {
                     PieceColor::White => set_bit(0, target - 8),
                     PieceColor::Black => set_bit(0, target + 8),
@@ -225,28 +224,31 @@ impl Chessboard {
                     }
                     PieceType::Bishop => {
                         let bb_king = self.pieces(friendly_color).get_bb_king();
+                        let king_index = (bb_king as f64).log2() as usize;
                         for direction_index in [1, 3, 5, 7] {
                             let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
                             if ray & bb_king != 0 {
-                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(bb_to_vec(bb_king)[0] as usize, (direction_index + 4)%8);
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(king_index, (direction_index + 4)%8);
                                 break
                             }
                         }
                     }
                     PieceType::Rook => {
                         let bb_king = self.pieces(friendly_color).get_bb_king();
+                        let king_index = (bb_king as f64).log2() as usize;
                         for direction_index in [0, 2, 4, 6] {
                             let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
                             if ray & bb_king != 0 {
-                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(bb_to_vec(bb_king)[0] as usize, (direction_index + 4)%8);
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(king_index, (direction_index + 4)%8);
                                 break
                             }
                         }
                     }
                     PieceType::Queen => {
                         let bb_king = self.pieces(friendly_color).get_bb_king();
+                        let king_index = (bb_king as f64).log2() as usize;
                         for direction_index in 0..8 {
-                            let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
+                            let ray = self.pseudo_moves.direction_ray(king_index, direction_index);
                             if ray & bb_king != 0 {
                                 legal_non_captures &= ray & self.pseudo_moves.direction_ray(bb_to_vec(bb_king)[0] as usize, (direction_index + 4)%8);
                                 break
@@ -279,7 +281,7 @@ impl Chessboard {
 
         let piece_type = self.pieces(&friendly_color).detect_piece_type(index);
         let king_bb = self.pieces(&friendly_color).get_bb_king();
-        let king_index = get_lsb_index(king_bb);
+        let king_index = (king_bb as f64).log2() as usize;
 
         // if the piece we want to move is not the king and if we are in double check, only king moves
         // are allowed so we return no legal moves
@@ -308,7 +310,7 @@ impl Chessboard {
         }
 
         // finally we take into account the possibilty that our piece is currently pinned to the king (an absolute pin)
-        let pinned = self.get_pinned(&friendly_color, &enemy_color);
+        let pinned = self.get_pinned(&friendly_color, &enemy_color, king_index);
         if (pinned >> index) & 1 == 1 {
             legal_moves = match piece_type {
                 // kings cannot be pinned
@@ -330,7 +332,7 @@ impl Chessboard {
         legal_moves
     }
 
-    fn get_pinned(&mut self, friendly_color: &PieceColor, enemy_color: &PieceColor) -> u64 {
+    fn get_pinned(&mut self, friendly_color: &PieceColor, enemy_color: &PieceColor, king_index: usize) -> u64 {
         // returns a bitboard with bits on all pieces that are currently pinned to the king
         // check if we still have the pinned pieces stored
         match self.pinned_pieces_cache {
@@ -339,9 +341,7 @@ impl Chessboard {
         }
 
         let mut pinned = 0;
-
         let blockers = self.pos.get_all();
-        let king_index = get_lsb_index(self.pieces(&friendly_color).get_bb_king());
 
         // loop over all enemy sliding pieces
         let enemy = self.pieces(&enemy_color);
@@ -703,7 +703,6 @@ impl Chessboard {
     pub fn new_start() -> Chessboard {
         Chessboard { pos: Position::new_start(),
         history: Vec::new(),
-        selected: Selected::None,
         pseudo_moves: LoadMoves::new(),
         legal_moves_cache: [None; 64],
         enemy_heat_cache: None,
@@ -716,7 +715,6 @@ impl Chessboard {
     pub fn new() -> Chessboard {
         Chessboard { pos: Position::new(),
             history: Vec::new(),
-        selected: Selected::None,
         pseudo_moves: LoadMoves::new(),
         legal_moves_cache: [None; 64],
         enemy_heat_cache: None,
@@ -1005,162 +1003,3 @@ impl Chessboard {
     }
 
 }
-
-
-#[pyclass]
-pub struct HumanChessboardInteraction {
-    chessboard: Chessboard,
-    selected: Selected
-}
-
-impl HumanChessboardInteraction {
-    fn select_new(&mut self, index: u8) {
-        let w_pieces = self.chessboard.pos.white_pieces.get_all();
-        let b_pieces = self.chessboard.pos.black_pieces.get_all();
-
-        match self.chessboard.pos.to_move {
-            // check if it is a valid new select
-            ToMove::White => {
-                if (w_pieces >> index) & 1 == 1 {
-                    self.selected = Selected::White(index)
-                }
-            }
-            // check if it is a valid new select
-            ToMove::Black => {
-                if (b_pieces >> index) & 1 == 1 {
-                    self.selected = Selected::Black(index)
-                }
-            }
-        }
-    }
-}
-
-#[pymethods]
-impl HumanChessboardInteraction {
-    #[new]
-    pub fn new() -> HumanChessboardInteraction {
-        HumanChessboardInteraction {chessboard: Chessboard::new(), selected: Selected::None}
-    }
-    #[staticmethod]
-    pub fn new_start() -> HumanChessboardInteraction {
-        HumanChessboardInteraction { chessboard: Chessboard::new_start(), selected: Selected::None}
-    }
-    pub fn load_fen(&mut self, fen: String) {
-        self.chessboard.load_fen(fen);
-    }
-
-    pub fn to_string(&self) -> String {
-        self.chessboard.to_string()
-    }
-
-    pub fn undo(&mut self) {
-        self.chessboard.undo();
-    }
-
-    pub fn get_selected(&self) -> i32 {
-        // return -1 in case we have no square selected, 
-        // note that Option<> is not available because this function
-        // is available to python, so we must strictly use integers
-        match self.selected {
-            Selected::None => -1,
-            Selected::Black(i) => i as i32,
-            Selected::White(i) => i as i32
-        }
-    }
-
-    pub fn get_legal_captures(&mut self, index: u8) -> Vec<u8> {
-        // index must be the index of the piece of which we want to get legal captures
-        let piece_color = self.chessboard.pos.detect_piece_color(index);
-        // return early if we have selected an empty square
-        match piece_color {
-            PieceColor::None => return vec![],
-            _ => {}
-        }
-        let legal_moves = self.chessboard.get_legal_moves(index);
-        // get enemy pieces
-        let enemy_pieces = match piece_color {
-            PieceColor::White => self.chessboard.pos.black_pieces.get_all(),
-            PieceColor::Black => self.chessboard.pos.white_pieces.get_all(),
-            _ => 0
-        };
-        // add en-passant possibly
-        let legal_captures = match self.chessboard.pos.es_target {
-            Some(target) => legal_moves & set_bit(enemy_pieces, target),
-            None => legal_moves & enemy_pieces
-        };
-        bb_to_vec(legal_captures)
-    }
-
-    pub fn get_legal_non_captures(&mut self, index: u8) -> Vec<u8> {
-        // index must be the index of the piece of which we want to get legal captures
-        let piece_color = self.chessboard.pos.detect_piece_color(index);
-        // return early if we have selected an empty square
-        match piece_color {
-            PieceColor::None => return vec![],
-            _ => {}
-        }
-        let legal_moves = self.chessboard.get_legal_moves(index);
-        // get enemy pieces
-        let enemy_pieces = match piece_color {
-            PieceColor::White => self.chessboard.pos.black_pieces.get_all(),
-            PieceColor::Black => self.chessboard.pos.white_pieces.get_all(),
-            _ => 0
-        };
-        let legal_non_captures = match self.chessboard.pos.es_target {
-            Some(target) => subtract_bb(legal_moves, set_bit(enemy_pieces, target)),
-            None => subtract_bb(legal_moves, enemy_pieces)
-        };
-        bb_to_vec(legal_non_captures)
-    }
-
-    pub fn input_select(&mut self, index: u8) {
-        let w_pieces = self.chessboard.pos.white_pieces.get_all();
-        let b_pieces = self.chessboard.pos.black_pieces.get_all();
-
-        match self.selected {
-            // in case we have not selected anything
-            Selected::None => {
-                self.select_new(index);
-            }
-            // in case we have already selected something
-            Selected::White(old_index) => {
-                match self.chessboard.pos.to_move {
-                    // might be possible
-                    ToMove::White => {
-                        // if newly selected piece is not white we can move or capture there
-                        if !((w_pieces >> index) & 1 == 1) {
-                            match self.chessboard.move_piece(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)}) {
-                                Ok(_) => {},
-                                Err(_) => {}
-                            };
-                        }
-                        // remove the highlight
-                        self.selected = Selected::None;
-                    }
-                    // can't move a white piece when black to move
-                    ToMove::Black => {}
-                    }
-                }
-            Selected::Black(old_index) => {
-                match self.chessboard.pos.to_move {
-                    // might be possible
-                    ToMove::Black => {
-                        // if newly selected piece is not black we can move or capture there
-                        if !((b_pieces >> index) & 1 == 1) {
-                            match self.chessboard.move_piece(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)}) {
-                                Ok(_) => {},
-                                Err(_) => {}
-                            };
-                        }
-                        self.selected = Selected::None;
-                    }
-                    ToMove::White => {}
-                }
-            }
-        }
-    }
-}
-
-
-
-
