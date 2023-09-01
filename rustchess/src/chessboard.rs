@@ -310,7 +310,7 @@ impl Chessboard {
         }
 
         // finally we take into account the possibilty that our piece is currently pinned to the king (an absolute pin)
-        let pinned = self.get_pinned(&friendly_color, &enemy_color, king_index);
+        let pinned = self.get_pinned(&enemy_color, king_index);
         if (pinned >> index) & 1 == 1 {
             legal_moves = match piece_type {
                 // kings cannot be pinned
@@ -332,7 +332,7 @@ impl Chessboard {
         legal_moves
     }
 
-    fn get_pinned(&mut self, friendly_color: &PieceColor, enemy_color: &PieceColor, king_index: usize) -> u64 {
+    fn get_pinned(&mut self, enemy_color: &PieceColor, king_index: usize) -> u64 {
         // returns a bitboard with bits on all pieces that are currently pinned to the king
         // check if we still have the pinned pieces stored
         match self.pinned_pieces_cache {
