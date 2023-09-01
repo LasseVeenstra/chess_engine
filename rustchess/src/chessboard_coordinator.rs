@@ -29,7 +29,7 @@ pub struct Coordinator {
 }
 
 impl Coordinator {
-    pub fn next_move(&mut self, new_move: Option<Move>) -> Result<(), NoLegalMoveInputError> {
+    pub fn next_move(&mut self, new_move: Option<&Move>) -> Result<(), NoLegalMoveInputError> {
         // This function will make the next move on the board. If Some(new_move) is not legal we will return a NoLegalMoveInputError.
         // Note that Some(new_move) will only be used whenever the player that has to move, is a human, i.e. computer1/2 is a None.
         // If computer1 has to move and computer1 is Some(T) then any value Some value passed into new_move will be ignored, since
@@ -43,7 +43,7 @@ impl Coordinator {
                     // Black to move and a computer is playing black
                     Some(computer) => {
                         let computer_move = computer.return_move(&mut self.chessboard);
-                        self.chessboard.move_piece(computer_move)?;
+                        self.chessboard.move_piece(&computer_move)?;
                     },
                     // Black to move but a human is playing black
                     None => {
@@ -62,7 +62,7 @@ impl Coordinator {
                     // Black to move and a computer is playing black
                     Some(computer) => {
                         let computer_move = computer.return_move(&mut self.chessboard);
-                        self.chessboard.move_piece(computer_move)?;
+                        self.chessboard.move_piece(&computer_move)?;
                     },
                     // Black to move but a human is playing black
                     None => {
@@ -168,7 +168,7 @@ impl Coordinator {
                 match self.chessboard.get_to_move() {
                     // might be possible
                     ToMove::White => {
-                        match self.next_move(Some(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)})) {
+                        match self.next_move(Some(&Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)})) {
                             Ok(_) => {},
                             Err(_) => {}
                         };
@@ -183,7 +183,7 @@ impl Coordinator {
                 match self.chessboard.get_to_move() {
                     // might be possible
                     ToMove::Black => {
-                        match self.next_move(Some(Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)})) {
+                        match self.next_move(Some(&Move { from: old_index, to: index, on_promotion: Some(PiecePromotes::Queen)})) {
                             Ok(_) => {},
                             Err(_) => {}
                         };

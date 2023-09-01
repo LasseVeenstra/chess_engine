@@ -487,7 +487,7 @@ impl Chessboard {
         }
     }
 
-    pub fn move_piece(&mut self, new_move: Move) -> Result<(), NoLegalMoveInputError> {
+    pub fn move_piece(&mut self, new_move: &Move) -> Result<(), NoLegalMoveInputError> {
         // make a clone of the current position that we add in the end in case the move was legally made
         let cloned = self.pos.clone();
 
@@ -754,7 +754,7 @@ impl Chessboard {
         let moves = self.all_moves();
         let mut num_positions = 0;
         // now loop over all moves
-        for current_move in moves {
+        for current_move in moves.iter() {
             self.move_piece(current_move).unwrap();
             num_positions += self.legal_positions_on_depth(depth - 1);
             self.undo();
@@ -770,7 +770,7 @@ impl Chessboard {
 
     pub fn debug_depth(&mut self, depth: u8) {
         let moves = self.all_moves();
-        for current_move in moves {
+        for current_move in &moves {
             self.move_piece(current_move).unwrap();
             println!("{}: {}", current_move.to_string(), self.legal_positions_on_depth(depth - 1));
             self.undo();
