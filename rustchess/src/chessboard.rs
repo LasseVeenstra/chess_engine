@@ -692,8 +692,13 @@ impl Chessboard {
         all_moves
     }
 
+    #[inline(always)]
     pub fn get_to_move(&self) -> &ToMove {
         &self.pos.to_move
+    }
+    #[inline(always)]
+    pub fn get_position(&self) -> &Position {
+        &self.pos
     }
 }
 
@@ -995,11 +1000,12 @@ impl Chessboard {
         bb_to_vec(legal_non_captures)
     }
 
+    #[inline(always)]
     pub fn get_white_pieces(&mut self) -> u64 {
         self.pos.white_pieces.get_all()
     }
+    #[inline(always)]
     pub fn get_black_pieces(&mut self) -> u64 {
         self.pos.black_pieces.get_all()
     }
-
 }
