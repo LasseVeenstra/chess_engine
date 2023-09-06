@@ -10,6 +10,7 @@ pub fn computer_from_string(name: &str) -> Option<Box<dyn RecieveAndReturnMove +
     match name {
         "human" => None,
         "random" => Some(Box::new(RandomComputer::new())),
+        "basic" => Some(Box::new(BasicTreeSearchComputer::new())),
         _ => None
     }
 }

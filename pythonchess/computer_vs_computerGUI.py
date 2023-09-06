@@ -9,8 +9,8 @@ class Chessboard_for_AIvsAI(board_frame.ChessboardCanvas):
         super().__init__(parent)
         
         # initialize the two players as random agents
-        self.chessboard_coordinator.set_player1("random")
-        self.chessboard_coordinator.set_player2("random")
+        self.chessboard_coordinator.set_player1("basic")
+        self.chessboard_coordinator.set_player2("basic")
         
     def next_move(self):
         self.chessboard_coordinator.next_computer_move()
