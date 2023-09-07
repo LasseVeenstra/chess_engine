@@ -110,10 +110,11 @@ impl RecieveAndReturnMove for BasicTreeSearchComputer {
     fn return_move(&mut self, chessboard: &mut Chessboard) -> Move {
         let depth = 4;
         self.depth = depth;
-        match chessboard.get_to_move() {
+        let eval = match chessboard.get_to_move() {
             ToMove::White => self.minimax(chessboard, depth, -100000, 100000, true),
             ToMove::Black => self.minimax(chessboard, depth, -100000, 100000, false)
         };
+        println!("current evaluation: {}", eval);
         self.best_move.unwrap()
     }
 }
