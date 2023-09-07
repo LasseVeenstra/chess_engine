@@ -466,7 +466,7 @@ impl LoadMoves {
             bishop_pre_masks: LoadMoves::parse_non_slide_masks("bishop_pre_masks.json").expect("No bishop pre masks table found"),
         direction_masks: LoadMoves::parse_direction_masks("direction_lookup.json").expect("No direction masks table found") }
     }
-    #[inline]
+    #[inline(always)]
     pub fn rook(&self, piece_index: usize, blockers: u64) -> Option<&u64> {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         // blockers is the bitboard with bits on enemy and friendly pieces combined, note that 
@@ -475,7 +475,7 @@ impl LoadMoves {
         let i = viewed_blockers.wrapping_mul(self.rook_magic_lookup.magic_numbers[piece_index]) >> self.rook_magic_lookup.shifts[piece_index];
         self.rook_magic_lookup.magic_masks[piece_index].get(i as usize)
     }
-    #[inline]
+    #[inline(always)]
     pub fn bishop(&self, piece_index: usize, blockers: u64) -> Option<&u64> {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         // blockers is the bitboard with bits on enemy and friendly pieces combined, note that 
@@ -484,34 +484,34 @@ impl LoadMoves {
         let i = viewed_blockers.wrapping_mul(self.bishop_magic_lookup.magic_numbers[piece_index]) >> self.bishop_magic_lookup.shifts[piece_index];
         self.bishop_magic_lookup.magic_masks[piece_index].get(i as usize)
     }
-    #[inline]
+    #[inline(always)]
     pub fn queen(&self, piece_index: usize, blockers: u64) -> Option<u64> {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         // blockers is the bitboard with bits on enemy and friendly pieces combined, note that 
         // this function will return a bitboard where friendly piece can be captured.
         Some(self.rook(piece_index, blockers)? | self.bishop(piece_index, blockers)?)
     }
-    #[inline]
+    #[inline(always)]
     pub fn king(&self, piece_index: usize) -> u64 {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         self.king_masks[piece_index]
     }
-    #[inline]
+    #[inline(always)]
     pub fn knight(&self, piece_index: usize) -> u64 {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         self.knight_masks[piece_index]
     }
-    #[inline]
+    #[inline(always)]
     pub fn white_pawn(&self, piece_index: usize) -> u64 {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         self.white_pawn_masks[piece_index]
     }
-    #[inline]
+    #[inline(always)]
     pub fn black_pawn(&self, piece_index: usize) -> u64 {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         self.black_pawn_masks[piece_index]
     }
-    #[inline]
+    #[inline(always)]
     pub fn direction_ray(&self, piece_index: usize, direction: usize) -> u64 {
         // piece_index must be a number between 0 and 63, not a bitboard with one bit!
         // directions is index as [north, northeast, east, southeast, south, southwest, west, northwest]

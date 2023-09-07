@@ -97,7 +97,7 @@ impl Chessboard {
             None => {},
             Some(target) => {
                 let blockers = self.pos.get_all();
-                let king_index = self.pieces(&friendly_color).get_king_index();
+                let king_index = get_lsb_index(self.pieces(&friendly_color).get_bb_king());
                 let invisable_pawn = match enemy_color {
                     PieceColor::White => set_bit(0, target - 8),
                     PieceColor::Black => set_bit(0, target + 8),
@@ -224,7 +224,7 @@ impl Chessboard {
                     }
                     PieceType::Bishop => {
                         let bb_king = self.pieces(friendly_color).get_bb_king();
-                        let king_index = (bb_king as f64).log2() as usize;
+                        let king_index = get_lsb_index(bb_king);
                         for direction_index in [1, 3, 5, 7] {
                             let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
                             if ray & bb_king != 0 {
@@ -235,7 +235,7 @@ impl Chessboard {
                     }
                     PieceType::Rook => {
                         let bb_king = self.pieces(friendly_color).get_bb_king();
-                        let king_index = (bb_king as f64).log2() as usize;
+                        let king_index = get_lsb_index(bb_king);
                         for direction_index in [0, 2, 4, 6] {
                             let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
                             if ray & bb_king != 0 {
@@ -246,11 +246,11 @@ impl Chessboard {
                     }
                     PieceType::Queen => {
                         let bb_king = self.pieces(friendly_color).get_bb_king();
-                        let king_index = (bb_king as f64).log2() as usize;
+                        let king_index = get_lsb_index(bb_king);
                         for direction_index in 0..8 {
-                            let ray = self.pseudo_moves.direction_ray(king_index, direction_index);
+                            let ray = self.pseudo_moves.direction_ray(index_of_checking_piece as usize, direction_index);
                             if ray & bb_king != 0 {
-                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(bb_to_vec(bb_king)[0] as usize, (direction_index + 4)%8);
+                                legal_non_captures &= ray & self.pseudo_moves.direction_ray(king_index, (direction_index + 4)%8);
                                 break
                             }
                         }
@@ -281,7 +281,7 @@ impl Chessboard {
 
         let piece_type = self.pieces(&friendly_color).detect_piece_type(index);
         let king_bb = self.pieces(&friendly_color).get_bb_king();
-        let king_index = (king_bb as f64).log2() as usize;
+        let king_index = get_lsb_index(king_bb);
 
         // if the piece we want to move is not the king and if we are in double check, only king moves
         // are allowed so we return no legal moves

@@ -375,7 +375,6 @@ pub struct Pieces {
     bb_bishops: u64,
     bb_queens: u64,
     bb_king: u64,
-    king_index: Option<usize>,
     all: Option<u64>, // all pieces in one bitboard, the option allows us to cache results,
     color: PieceColor
 }
@@ -389,7 +388,6 @@ impl Pieces {
             bb_bishops: 0, 
             bb_queens: 0, 
             bb_king: 0,
-            king_index: None,
             all: None,
             color: piece_color}
     }
@@ -401,7 +399,6 @@ impl Pieces {
             bb_bishops: WHITE_BISHOP_STARTING_BB, 
             bb_queens: WHITE_QUEEN_STARTING_BB, 
             bb_king: WHITE_KING_STARTING_BB,
-            king_index: Some(60),
             all: None,
             color: PieceColor::White};
         pieces.get_all();
@@ -415,7 +412,6 @@ impl Pieces {
             bb_bishops: BLACK_BISHOP_STARTING_BB, 
             bb_queens: BLACK_QUEEN_STARTING_BB, 
             bb_king: BLACK_KING_STARTING_BB,
-            king_index: Some(4),
             all: None,
         color: PieceColor::Black};
         pieces.get_all();
@@ -434,78 +430,67 @@ impl Pieces {
             }
         }
     }
-    // #[inline]
+    #[inline]
     pub fn get_color(&self) -> &PieceColor {
         &self.color
     }
     // get all the pieces bitboards
-    // #[inline]
+    #[inline]
     pub fn get_bb_pawns(&self) -> u64 {
         self.bb_pawns
     }
-    // #[inline]
+    #[inline]
     pub fn get_bb_rooks(&self) -> u64 {
         self.bb_rooks
     }
-    // #[inline]
+    #[inline]
     pub fn get_bb_knights(&self) -> u64 {
         self.bb_knights
     }
-    // #[inline]
+    #[inline]
     pub fn get_bb_bishops(&self) -> u64 {
         self.bb_bishops
     }
-    // #[inline]
+    #[inline]
     pub fn get_bb_queens(&self) -> u64 {
         self.bb_queens
     }
-    // #[inline]
+    #[inline]
     pub fn get_bb_king(&self) -> u64 {
         self.bb_king
     }
-    // #[inline]
-    pub fn get_king_index(&mut self) -> usize {
-        match self.king_index {
-            Some(i) => i,
-            None => {
-                let i = (self.bb_king as f64).log2() as usize;
-                self.king_index = Some(i);
-                i
-            }
-        }
-    }
     // set all the pieces bitboards
-    // #[inline]
+    #[inline]
     pub fn set_bb_pawns(&mut self, new_bb: u64){
         self.bb_pawns = new_bb;
         self.all = None;
     }
-    // #[inline]
+    #[inline]
     pub fn set_bb_rooks(&mut self, new_bb: u64){
         self.bb_rooks = new_bb;
         self.all = None;
     }
-    // #[inline]
+    #[inline]
     pub fn set_bb_knights(&mut self, new_bb: u64){
         self.bb_knights = new_bb;
         self.all = None;
     }
-    // #[inline]
+    #[inline]
     pub fn set_bb_bishops(&mut self, new_bb: u64){
         self.bb_bishops = new_bb;
         self.all = None;
     }
-    // #[inline]
+    #[inline]
     pub fn set_bb_queens(&mut self, new_bb: u64){
         self.bb_queens = new_bb;
         self.all = None;
     }
-    // #[inline]
+    #[inline]
     pub fn set_bb_king(&mut self, new_bb: u64){
         self.bb_king = new_bb;
         self.all = None;
-        self.king_index = None;
     }
+    #[inline]
     pub fn detect_piece_type(&self, piece_index: u8) -> PieceType {
         // Detects the piece type of the current piece location. Piece index must
         // be an integer between 0 and 63, not a bitboard with one bit!
@@ -531,7 +516,7 @@ impl Pieces {
             PieceType::EmptySquare
         }
     }
-    // #[inline]
+    #[inline]
     pub fn piece_type2bb(&self, piece_type: &PieceType) -> u64 {
         // note that the returned bitboard is a copy of the stored bitboard,
         // so it is not a mutable reference!
@@ -546,7 +531,7 @@ impl Pieces {
         }
     }
 
-    // #[inline]
+    #[inline]
     pub fn set_bb_of_piece_type(&mut self,bb: u64, piece_type: &PieceType) {
         match piece_type {
             PieceType::Pawn => self.set_bb_pawns(bb),
@@ -603,12 +588,12 @@ impl Position {
             fullmove_clock: 1
         }
     }
-    // #[inline]
+    #[inline]
     pub fn get_all(&mut self) -> u64 {
         // returns a bitboard with all pieces, black and white
         self.black_pieces.get_all() | self.white_pieces.get_all()
     }
-    // #[inline]
+    #[inline]
     pub fn piece_type_color2bb(&self, piece_type: &PieceType, piece_color: &PieceColor) -> u64 {
         // takes in the piecetype and piececolor and returns the bitboard
         match piece_color {
@@ -617,7 +602,7 @@ impl Position {
             _ => 0
         }
     }
-    // #[inline]
+    #[inline]
     pub fn set_bb_of_piece_type_color(&mut self, bb: u64, piece_type: &PieceType, piece_color: &PieceColor) {
         // takes in the piecetype and piececolor and sets the bb to that values
         match piece_color {
@@ -626,7 +611,7 @@ impl Position {
             _ => {}
         }
     }
-    // #[inline]
+    #[inline]
     fn index2char(&self, index: u8) -> char {
         match self.black_pieces.detect_piece_type(index) {
             PieceType::EmptySquare => match self.white_pieces.detect_piece_type(index) {
@@ -636,7 +621,7 @@ impl Position {
             other => other.to_char()
         }
     }
-    // #[inline]
+    #[inline]
     pub fn to_string(&self) -> String {
         (0..64).map(|i| self.index2char(i).to_string()).collect::<Vec<String>>().join("")
     }

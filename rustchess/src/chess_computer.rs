@@ -31,6 +31,8 @@ impl RandomComputer {
     }
 }
 
+
+
 pub struct BasicTreeSearchComputer {
     best_move: Option<Move>,
     depth: u8
@@ -38,11 +40,11 @@ pub struct BasicTreeSearchComputer {
 
 impl RecieveAndReturnMove for BasicTreeSearchComputer {
     fn return_move(&mut self, chessboard: &mut Chessboard) -> Move {
-        let depth = 4;
+        let depth = 5;
         self.depth = depth;
         match chessboard.get_to_move() {
-            ToMove::White => self.minimax(chessboard, depth, true),
-            ToMove::Black => self.minimax(chessboard, depth, false)
+            ToMove::White => self.minimax(chessboard, depth, -100000, 100000, true),
+            ToMove::Black => self.minimax(chessboard, depth, -100000, 100000, false)
         };
         self.best_move.unwrap()
     }
@@ -58,23 +60,23 @@ impl BasicTreeSearchComputer {
         let mut eval = 0;
         // subtract the value of all black pieces on the board
         let black_pieces = &position.black_pieces;
-        eval -= bb_to_vec(black_pieces.get_bb_bishops()).len() as i32 * 30;
-        eval -= bb_to_vec(black_pieces.get_bb_knights()).len() as i32 * 30;
-        eval -= bb_to_vec(black_pieces.get_bb_rooks()).len() as i32 * 50;
-        eval -= bb_to_vec(black_pieces.get_bb_queens()).len() as i32 * 90;
-        eval -= bb_to_vec(black_pieces.get_bb_pawns()).len() as i32 * 10;
+        eval -= bb_to_vec(black_pieces.get_bb_bishops()).len() as i32 * 330;
+        eval -= bb_to_vec(black_pieces.get_bb_knights()).len() as i32 * 320;
+        eval -= bb_to_vec(black_pieces.get_bb_rooks()).len() as i32 * 500;
+        eval -= bb_to_vec(black_pieces.get_bb_queens()).len() as i32 * 900;
+        eval -= bb_to_vec(black_pieces.get_bb_pawns()).len() as i32 * 100;
         // subtract the value of all white pieces on the board
         let white_pieces = &position.white_pieces;
-        eval += bb_to_vec(white_pieces.get_bb_bishops()).len() as i32 * 30;
-        eval += bb_to_vec(white_pieces.get_bb_knights()).len() as i32 * 30;
-        eval += bb_to_vec(white_pieces.get_bb_rooks()).len() as i32 * 50;
-        eval += bb_to_vec(white_pieces.get_bb_queens()).len() as i32 * 90;
-        eval += bb_to_vec(white_pieces.get_bb_pawns()).len() as i32 * 10;
+        eval += bb_to_vec(white_pieces.get_bb_bishops()).len() as i32 * 330;
+        eval += bb_to_vec(white_pieces.get_bb_knights()).len() as i32 * 320;
+        eval += bb_to_vec(white_pieces.get_bb_rooks()).len() as i32 * 500;
+        eval += bb_to_vec(white_pieces.get_bb_queens()).len() as i32 * 900;
+        eval += bb_to_vec(white_pieces.get_bb_pawns()).len() as i32 * 100;
 
         eval
     }
 
-    pub fn minimax(&mut self, chessboard: &mut Chessboard, depth: u8, maximizing_player: bool) -> i32 {
+    pub fn minimax(&mut self, chessboard: &mut Chessboard, depth: u8, mut alpha: i32, mut beta: i32, maximizing_player: bool) -> i32 {
         // depth is how far ahead we want to search, maximizing_player deals with either white to move or black
         if depth == 0 {
             return BasicTreeSearchComputer::static_evaluate(chessboard.get_position())
@@ -84,29 +86,37 @@ impl BasicTreeSearchComputer {
             let mut max_eval = -100000;
             for new_move in chessboard.all_moves().iter() {
                 chessboard.move_piece(new_move).unwrap();
-                let eval = self.minimax(chessboard, depth - 1, false);
+                let eval = self.minimax(chessboard, depth - 1, alpha, beta, false);
                 max_eval = cmp::max(max_eval, eval);
+                alpha = cmp::max(alpha, eval);
+                if beta <= alpha {
+                    chessboard.undo();
+                    break
+                }
                 if depth == self.depth && max_eval == eval {
                     self.best_move = Some(*new_move);
                 }
                 chessboard.undo();
-                return max_eval
             }
+            return max_eval
         }
         else {
             let mut min_eval = 100000;
             for new_move in chessboard.all_moves().iter() {
                 chessboard.move_piece(new_move).unwrap();
-                let eval = self.minimax(chessboard, depth - 1, true);
+                let eval = self.minimax(chessboard, depth - 1, alpha, beta, true);
                 min_eval = cmp::min(min_eval, eval);
+                beta = cmp::min(beta, eval);
+                if beta <= alpha {
+                    chessboard.undo();
+                    break
+                }
                 if depth == self.depth && min_eval == eval {
                     self.best_move = Some(*new_move);
                 }
                 chessboard.undo();
-                return min_eval
             }
+            return min_eval
         }
-        // we will reach this whenever the are no legal moves that we can loop over
-        return BasicTreeSearchComputer::static_evaluate(chessboard.get_position())
     }
 }
