@@ -39,14 +39,6 @@ def index2rank_file(i: int) -> (int, int):
 
 def rank_file2index(rank: int, file: int) -> int:
     return ((8-rank)*8) + file - 1
-
-# a Frame class that will hold a piece and an image
-class ChessboardSquareLabel(tk.Label):
-    # parent must be the ChessboardFrame
-    def __init__(self, parent, image):
-        tk.Label.__init__(self, parent, image=image)
-        parent.bind_events(self)
-        
         
 class ChessboardCanvas(tk.Canvas):
     def __init__(self, parent):
@@ -235,6 +227,7 @@ class ChessboardCanvas(tk.Canvas):
         # load the position
         self.load_position(self.chessboard_coordinator.to_string())
         self.update_idletasks()
+        self.update()
 
 def main():
     window = tk.Tk()

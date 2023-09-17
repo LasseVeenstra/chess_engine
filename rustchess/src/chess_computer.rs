@@ -102,13 +102,14 @@ const KING_SCORE_MIDDLE_GAME: [i32; 64] = [
  -50,-30,-30,-30,-30,-30,-30,-50];
 
 pub struct BasicTreeSearchComputer {
+    final_move: Option<Move>, // when computer has already calculated move that it will play
     best_move: Option<Move>,
     depth: u8
 }
 
 impl RecieveAndReturnMove for BasicTreeSearchComputer {
     fn return_move(&mut self, chessboard: &mut Chessboard) -> Move {
-        let depth = 4;
+        let depth = 5;
         self.depth = depth;
         let eval = match chessboard.get_to_move() {
             ToMove::White => self.minimax(chessboard, depth, -100000, 100000, true),
@@ -121,7 +122,7 @@ impl RecieveAndReturnMove for BasicTreeSearchComputer {
 
 impl BasicTreeSearchComputer {
     pub fn new() -> BasicTreeSearchComputer {
-        BasicTreeSearchComputer {best_move: None, depth: 4}
+        BasicTreeSearchComputer {final_move: None, best_move: None, depth: 4}
     }
     pub fn static_evaluate(position: &Position) -> i32 {
         // evaluate the position it is given, positive evaluation means good for white

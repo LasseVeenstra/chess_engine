@@ -217,10 +217,21 @@ class AnalysisPage(ttk.Frame):
     # def to_StartPage(self):
     #     self.controller.show_frame(StartPage)
     
+    def create_fen_upload(self, parent):
+        self.fenUploadFrame = tk.Frame(parent)
+        self.entry_str = tk.StringVar()
+        fenEntry = ttk.Entry(self.fenUploadFrame, textvariable=self.entry_str)
+        fenEntry.grid(row=0, column=0)
+        fenSubmit = ttk.Button(self.fenUploadFrame, text="upload FEN", command=lambda: self.chessboard.load_fen(self.entry_str.get()))
+        fenSubmit.grid(row=0, column=1)
+    
     def create_buttons(self):
         self.buttons_frame = ttk.Frame(self)
         ttk.Button(self.buttons_frame, text="reset", command=self.chessboard.reset_position).grid(row=0, column=0)
         ttk.Button(self.buttons_frame, text="undo", command=self.chessboard.undo).grid(row=1, column=0)
         ttk.Button(self.buttons_frame, text="test depth", command=self.chessboard.test_move_calculation).grid(row=2, column=0)
+        self.create_fen_upload(self.buttons_frame)
+        self.fenUploadFrame.grid(row=3, column=0)
+    
         
         

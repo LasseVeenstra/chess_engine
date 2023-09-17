@@ -3,6 +3,7 @@ from tkinter import ttk
 from time import sleep
 from computer_vs_computerGUI import ComputerVSComputerPage
 from analysisGUI import AnalysisPage
+from play_vs_computerGUI import PlayervsAIPage
 
 class Visual(tk.Tk):
     def __init__(self, *args, **kwargs):
@@ -27,6 +28,10 @@ class Visual(tk.Tk):
         compvcompframe = ComputerVSComputerPage(container, self)
         self.frames[ComputerVSComputerPage] = compvcompframe
         compvcompframe.grid(row=0, column=0, sticky="nsew")
+        
+        compvAIframe = PlayervsAIPage(container, self)
+        self.frames[PlayervsAIPage] = compvAIframe
+        compvAIframe.grid(row=0, column=0, sticky="nsew")
         
         analysisframe = AnalysisPage(container, self)
         self.frames[AnalysisPage] = analysisframe
@@ -55,10 +60,17 @@ class StartPage(ttk.Frame):
         
         ttk.Button(self, text="analysis board", command=lambda: self.controller.show_frame(AnalysisPage)).grid(row=2, column=0)
         
+        self.make_playervsAI_frame()
+        self.playervsAI.grid(row=3, column=0)
+        
     def make_AIvsAI_frame(self):
         self.AIvsAI = ttk.Frame(self)
         ttk.Label(self.AIvsAI, text="watch computers fight computers!").grid(row=0, column=0)
         ttk.Button(self.AIvsAI, text="GO!", command=lambda: self.controller.show_frame(ComputerVSComputerPage)).grid(row=0, column=1)
+    
+    def make_playervsAI_frame(self):
+        self.playervsAI = ttk.Frame(self)
+        ttk.Button(self.playervsAI, text="play vs a computer!", command=lambda: self.controller.show_frame(PlayervsAIPage)).grid(row=0, column=0)
     
 if __name__ == '__main__':
     test = Visual()

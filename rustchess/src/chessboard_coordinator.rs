@@ -159,6 +159,21 @@ impl Coordinator {
     }
 
     pub fn input_select(&mut self, index: u8) {
+        // if we try to select while a computer has to move, we return early
+        match self.chessboard.get_to_move() {
+            ToMove::White => {
+                match self.computer1 {
+                    Some(_) => return,
+                    None => {}
+                }
+            }
+            ToMove::Black => {
+                match self.computer2 {
+                    Some(_) => return,
+                    None => {}
+                }
+            }
+        }
         match self.selected {
             // in case we have not selected anything
             Selected::None => {
@@ -200,6 +215,13 @@ impl Coordinator {
     }
     pub fn empty_position(&mut self) {
         self.chessboard = Chessboard::new();
+    }
+
+    pub fn get_to_move(& self) -> &str {
+        match self.chessboard.get_to_move() {
+            ToMove::White => return "player1",
+            ToMove::Black => return "player2"
+        }
     }
 
     pub fn test_positions(&mut self) {
